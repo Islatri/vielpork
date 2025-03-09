@@ -150,25 +150,6 @@ pub async fn auto_filename(resolved: &ResolvedResource, meta: &DownloadMeta) -> 
         
     }
 
-    // if let Some(url) = reqwest::Url::parse(&resolved.url).ok() {
-    //     println!("URL 解析成功: {:?}", url);
-    //     if let Some(segments) = url.path_segments() {
-    //         println!("路径段: {:?}", segments.clone().collect::<Vec<_>>());
-    //         if let Some(last_segment) = segments.last() {
-    //             let url_filename = last_segment.to_string();
-    //             println!("URL Path: {}", url_filename); // 进入了这里，但是url_filename是空的
-    //             return Ok(url_filename);
-    //         } else {
-    //             println!("路径段的最后一个部分为空");
-    //         }
-    //     } else {
-    //         println!("路径段为空");
-    //     }
-    // } else {
-    //     println!("URL解析失败");
-    // }
-
-    // 生成随机文件名
     generate_random_filename(meta)
 }
 
@@ -185,6 +166,12 @@ fn generate_random_filename(meta: &DownloadMeta) -> Result<String> {
     let random_name = uuid::Uuid::new_v4().to_string();
     Ok(format!("{}.{}", random_name, ext))
 }
+
+// 把%20等转义字符替换成对应的字符
+fn clearify_filename(name: &str) -> String {
+    percent_encoding::percent_decode_str(name).decode_utf8_lossy().to_string()
+}
+
 
 fn sanitize_filename(name: &str) -> String {
     let replace_char = '_';
@@ -241,12 +228,20 @@ pub async fn custom_filename(
         }),
     };
 
+    // println!("Template: {}", template);
+    // println!("Context: {:?}", context);
     // 渲染模板
     let raw_name = renderer.render_path_template(template, &context).map_err(|e| e)?;
 
+    // println!("Raw name: {}", raw_name);
+
     // 清理和截断文件名
     let sanitized = sanitize_filename(&raw_name);
-    let final_name = truncate_filename(&sanitized, max_length);
+    // println!("Sanitized name: {}", sanitized);
+    let clarified = clearify_filename(&sanitized);
+    // println!("Clarified name: {}", clarified);
+    let final_name = truncate_filename(&clarified, max_length);
+    // println!("Final name: {}", final_name);
 
     Ok(final_name)
 }

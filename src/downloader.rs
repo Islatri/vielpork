@@ -368,6 +368,10 @@ impl Downloader {
                 // 根据拼接后的字符串生成随机3232
                 task_id = generate_task_id(&params.join(""));
             }
+            DownloadResource::HashMap(hashmap) => {
+                // 根据拼接后值的字符串生成随机3232
+                task_id = generate_task_id(&hashmap.values().cloned().collect::<Vec<_>>().join(""));
+            }
             DownloadResource::Resolved(resolved) => {
                 // 根据url生成随机3232
                 task_id = generate_task_id(&resolved.url);
@@ -538,7 +542,7 @@ impl Downloader {
         } else {
             task.transition_state(TaskState::Failed).await?;
             self.reporter.finish_task(task_id, DownloadResult::Failed {
-                error: "Downloaded size does not match expected size".to_string(),
+                error: format!("Downloaded size mismatch: {} != {}", metadata.len(), total_size),
                 retryable: true,
             }).await?;
         }

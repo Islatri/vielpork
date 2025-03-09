@@ -111,6 +111,11 @@ impl DownloadOptions {
         Self::default()
     }
 
+    pub fn with_path_policy(mut self, policy: PathPolicy) -> Self {
+        self.path_policy = policy;
+        self
+    }
+
     pub fn with_save_path(mut self, path: impl Into<String>) -> Self {
         self.save_path = path.into();
         self
@@ -269,8 +274,18 @@ impl PathPolicy {
         self
     }
 
+    pub fn with_template(mut self, template: impl Into<String>) -> Self {
+        self.template = Some(template.into());
+        self
+    }
+
     pub fn with_organization(mut self, organization: impl Into<String>) -> Self {
         self.organization = organization.into();
+        self
+    }
+
+    pub fn with_dir_template(mut self, dir_template: impl Into<String>) -> Self {
+        self.dir_template = Some(dir_template.into());
         self
     }
 

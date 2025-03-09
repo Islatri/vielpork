@@ -1,5 +1,6 @@
 use super::structs::{ResolvedResource, DownloadProgress};
 use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum DownloaderState {
@@ -107,5 +108,6 @@ pub enum DownloadResource {
     Url(String),
     Id(String), 
     Params(Vec<String>),
+    HashMap(HashMap<String, String>),
     Resolved(ResolvedResource),
 }

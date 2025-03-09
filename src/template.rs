@@ -52,6 +52,7 @@ impl TemplateRenderer {
 }
 
 /// 模板上下文数据
+#[derive(Debug, Clone)]
 pub struct TemplateContext<'a> {
     pub url: &'a str,
     pub domain: Option<&'a str>,
