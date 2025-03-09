@@ -10,7 +10,7 @@ pub enum DownloaderState {
     Stopped,   
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default,Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Eq,PartialEq, Default,Serialize, Deserialize)]
 pub enum TaskState {
     #[default]
     Pending,     

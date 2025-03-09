@@ -20,6 +20,12 @@ use tokio::sync::Mutex;
             DownloadResource::Url("https://example.com".to_string()),
             DownloadResource::Url("https://example.com".to_string()),
             DownloadResource::Url("https://example.com".to_string()),
+            DownloadResource::Url("https://example.com".to_string()),
+            DownloadResource::Url("https://example.com".to_string()),
+            DownloadResource::Url("https://example.com".to_string()),
+            DownloadResource::Url("https://example.com".to_string()),
+            DownloadResource::Url("https://example.com".to_string()),
+            DownloadResource::Url("https://example.com".to_string()),
         ];
 
 
@@ -30,8 +36,7 @@ use tokio::sync::Mutex;
             
         });
 
-        // downloader.lock().await.start(vec![114514,1919810,1001653,1538879]).await?;
-
+        
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         downloader.lock().await.pause().await?;
         println!("Paused");
@@ -42,24 +47,36 @@ use tokio::sync::Mutex;
         println!("");
         downloader.lock().await.resume().await?;
 
-        println!("Pausing task 1538879 in 2 seconds");
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        downloader.lock().await.pause_task(1538879).await?;
+        // 获取任务id列表
+        let tasks = downloader.lock().await.get_downloading_tasks().await;
 
-        println!("Paused task 1538879");
-        println!("Resuming task 1538879 in 2 seconds");
+        if tasks.is_empty() {
+            println!("No tasks found");
+            return Ok(());
+        } else {
+            println!("Tasks found");
+        }
+
+        let task_id = tasks[0].id;
+        
+        println!("Pausing task task_id in 2 seconds");
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        downloader.lock().await.pause_task(task_id).await?;
+
+        println!("Paused task task_id");
+        println!("Resuming task task_id in 2 seconds");
         println!("");
         println!("");
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        downloader.lock().await.resume_task(1538879).await?;
-        // println!("Resumed task 1538879");
+        downloader.lock().await.resume_task(task_id).await?;
+        // println!("Resumed task task_id");
 
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        println!("Canceling task 1538879 in 2 seconds");
+        println!("Canceling task task_id in 2 seconds");
         println!("");
         println!("");
-        downloader.lock().await.cancel_task(1538879).await?;
-        // println!("Canceled task 1538879");
+        downloader.lock().await.cancel_task(task_id).await?;
+        // println!("Canceled task task_id");
 
         // 单个暂停然后遇到死锁了，但是好像又好了？，挺奇怪的
         // 单个取消好像没能提前设置好状态

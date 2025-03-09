@@ -90,6 +90,20 @@ impl Downloader {
     pub async fn get_tasks(&self) -> Vec<DownloadTask> {
         self.tasks.read().await.clone()
     }
+    pub async fn get_downloading_tasks(&self) -> Vec<DownloadTask> {
+        let tasks = self.tasks.read().await;
+        futures::stream::iter(tasks.iter())
+            .filter_map(|t| async move {
+                let state = t.state.read().await;
+                if *state == TaskState::Downloading {
+                    Some(t.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .await
+    }
     //
     pub async fn optimize_resources(
         &self,
@@ -125,8 +139,7 @@ impl Downloader {
         optimized
     }
     pub async fn start(&self, resources: Vec<DownloadResource>) -> Result<()> {
-        // 这个解决重复下载...，必须要能够有id或者url解析之后的对应，否则就只能用url了
-        // task记录url，然后这里解析和去准备一下，除掉对应url的resource
+        
         let options = self.get_options().await;
         let save_path = &options.save_path;
         let state_path = PathBuf::from(save_path).join("downloading.json");

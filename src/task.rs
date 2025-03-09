@@ -73,6 +73,7 @@ impl DownloadTask {
             (TaskState::Paused, TaskState::Downloading) => true,
             (TaskState::Downloading, TaskState::Completed) => true,
             (TaskState::Downloading, TaskState::Failed) => true,
+            (TaskState::Failed,_) => true,
             (_, TaskState::Canceled) => true,
             _ => false,
         };
