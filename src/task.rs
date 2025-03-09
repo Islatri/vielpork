@@ -19,6 +19,7 @@ pub struct PersistentState {
 #[derive(Serialize, Deserialize)]
 pub struct TaskStateRecord {
     pub id: u32,
+    pub url: String,
     pub downloaded_bytes: u64,
     pub total_bytes: u64,
     pub file_path: PathBuf,
@@ -28,6 +29,7 @@ pub struct TaskStateRecord {
 #[derive(Debug,Clone)]
 pub struct DownloadTask {
     pub id: u32,
+    pub url: String,
     handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     cancel_token: tokio_util::sync::CancellationToken,
     pub state: Arc<RwLock<TaskState>>,
@@ -37,9 +39,10 @@ pub struct DownloadTask {
 }
 
 impl DownloadTask {
-    pub fn new(id: u32, file_path: PathBuf, total_size: u64) -> Self {
+    pub fn new(id: u32,url:String ,file_path: PathBuf, total_size: u64) -> Self {
         Self {
             id,
+            url,
             handle: Arc::new(Mutex::new(None)),
             cancel_token: tokio_util::sync::CancellationToken::new(),
             state: Arc::new(RwLock::new(TaskState::default())),

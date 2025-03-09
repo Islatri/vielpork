@@ -225,6 +225,7 @@ pub enum DownloadResource {
     Url(String),
     Id(String), 
     Params(Vec<String>),
+    Resolved(ResolvedResource),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

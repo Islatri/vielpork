@@ -1,11 +1,24 @@
 use crate::task::{ DownloadTask, PersistentState, TaskStateRecord };
-use crate::base::traits::{CombinedReporter, ResourceResolver};
+use crate::base::traits::{ CombinedReporter, ResourceResolver };
 use crate::base::algorithms::rate_remaining_progress;
-use crate::base::enums::{DownloadResult, DownloaderState, OperationType, TaskState};
-use crate::base::structs::{DownloadResource,DownloadProgress, DownloadOptions ,ResolvedResource,DownloadMeta};
+use crate::base::enums::{ DownloadResult, DownloaderState, OperationType, TaskState };
+use crate::base::structs::{
+    DownloadResource,
+    DownloadProgress,
+    DownloadOptions,
+    ResolvedResource,
+    DownloadMeta,
+};
 use crate::error::Result;
-use crate::base::algorithms::{generate_task_id,auto_filename, custom_filename,  organize_by_domain, organize_by_type, custom_directory};
-use crate::template::{TemplateRenderer, TemplateContext};
+use crate::base::algorithms::{
+    generate_task_id,
+    auto_filename,
+    custom_filename,
+    organize_by_domain,
+    organize_by_type,
+    custom_directory,
+};
+use crate::template::{ TemplateRenderer, TemplateContext };
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::io::AsyncWriteExt;
@@ -16,15 +29,19 @@ use std::path::PathBuf;
 pub struct Downloader {
     client: reqwest::Client,
     options: Arc<RwLock<DownloadOptions>>,
-    state: Arc<RwLock<DownloaderState>>, 
-    tasks: Arc<RwLock<Vec<DownloadTask>>>, 
+    state: Arc<RwLock<DownloaderState>>,
+    tasks: Arc<RwLock<Vec<DownloadTask>>>,
     resolver: Arc<Box<dyn ResourceResolver>>,
-    reporter: Arc<Box<dyn CombinedReporter>>, 
+    reporter: Arc<Box<dyn CombinedReporter>>,
     state_notifier: tokio::sync::broadcast::Sender<DownloaderState>,
 }
 
 impl Downloader {
-    pub fn new(options: DownloadOptions,resolver: Box<dyn ResourceResolver>,reporter:Box<dyn CombinedReporter>) -> Self {
+    pub fn new(
+        options: DownloadOptions,
+        resolver: Box<dyn ResourceResolver>,
+        reporter: Box<dyn CombinedReporter>
+    ) -> Self {
         let client = reqwest::ClientBuilder
             ::new()
             .user_agent("osynicite")
@@ -60,10 +77,7 @@ impl Downloader {
             self.state_notifier.send(new_state.clone()).ok();
             Ok(())
         } else {
-            Err(
-                    format!("Cannot transition from {:?} to {:?}", *current, new_state)
-                .into()
-            )
+            Err(format!("Cannot transition from {:?} to {:?}", *current, new_state).into())
         }
     }
     pub async fn update_options(&self, options: DownloadOptions) -> Self {
@@ -76,13 +90,115 @@ impl Downloader {
     pub async fn get_tasks(&self) -> Vec<DownloadTask> {
         self.tasks.read().await.clone()
     }
-    pub async fn start(&self, 
-        // task_ids: Vec<u32>,urls: Vec<String>
-        resources: Vec<DownloadResource>
-    ) -> Result<()> {
+    //
+    pub async fn optimize_resources(
+        &self,
+        resources: Vec<DownloadResource>,
+        state: PersistentState
+    ) -> Vec<DownloadResource> {
+        let mut optimized = Vec::new();
+        let resolver = self.resolver.clone();
+        // 先解析所有的资源，然后对比resolved_resources的url是否在state中且已完成或取消
+        let resolved_resources = futures::future::join_all(
+            resources.into_iter().map(async |resource| { resolver.resolve(&resource).await })
+        ).await;
 
+        // 只需要比较resolved即可
+
+        for resolved in resolved_resources.iter() {
+            match resolved {
+                Ok(resolved) => {
+                    let task = state.tasks.iter().find(|t| t.url == resolved.url);
+                    match task {
+                        Some(t) => {
+                            if t.state != TaskState::Completed || t.state != TaskState::Canceled {
+                                
+                            }
+                        }
+                        None => {
+                            optimized.push(DownloadResource::Resolved(resolved.clone()));
+                        }
+                    }
+                }
+                Err(_) => {}
+            }
+        }
+
+        // for (resource, resolved) in resources.iter().zip(resolved_resources.iter()) {
+        //     match resource {
+        //         DownloadResource::Url(url) => {
+        //             let task = state.tasks.iter().find(|t| t.url == *url);
+        //             match task {
+        //                 Some(t) => {
+        //                     if t.state == TaskState::Completed || t.state == TaskState::Canceled {
+        //                         continue;
+        //                     }
+        //                 }
+        //                 None => {
+        //                     optimized.push(DownloadResource::Url(url.clone()));
+        //                 }
+        //             }
+        //         }
+        //         DownloadResource::Id(id) => {
+        //             let task = state.tasks.iter().find(|t| t.id == *id);
+        //             match task {
+        //                 Some(t) => {
+        //                     if t.state == TaskState::Completed || t.state == TaskState::Canceled {
+        //                         continue;
+        //                     }
+        //                 }
+        //                 None => {
+        //                     optimized.push(DownloadResource::Id(*id));
+        //                 }
+        //             }
+        //         }
+        //         DownloadResource::Params(params) => {
+        //             optimized.push(DownloadResource::Params(params.clone()));
+        //         }
+        //     }
+        // }
+
+        // for resource in resources {
+        //     match resource {
+        //         DownloadResource::Url(url) => {
+
+        //             // 检查url是否在state中且已完成或取消
+        //             // let task = state.tasks.iter().find(|t| t.url == url);
+        //             // match task {
+        //             //     Some(t) => {
+        //             //         if t.state == TaskState::Completed || t.state == TaskState::Canceled {
+        //             //             continue;
+        //             //         }
+        //             //     }
+        //             //     None => {
+        //             //         optimized.push(DownloadResource::Url(url));
+        //             //     }
+        //             // }
+
+        //         }
+        //         DownloadResource::Id(id) => {
+        //         }
+        //         DownloadResource::Params(params) => {
+        //             optimized.push(DownloadResource::Params(params));
+        //         }
+        //     }
+        // }
+        optimized
+    }
+    pub async fn start(&self, resources: Vec<DownloadResource>) -> Result<()> {
         // 这个解决重复下载...，必须要能够有id或者url解析之后的对应，否则就只能用url了
         // task记录url，然后这里解析和去准备一下，除掉对应url的resource
+        let options = self.get_options().await;
+        let save_path = &options.save_path;
+        let state_path = PathBuf::from(save_path).join("downloading.json");
+        let optimized_resources: Vec<DownloadResource>;
+        if state_path.exists() {
+            let contents = tokio::fs::read_to_string(&state_path).await?;
+            let state: PersistentState = serde_json::from_str(&contents)?;
+            optimized_resources = self.optimize_resources(resources, state).await;
+        } else {
+            optimized_resources = resources;
+        }
 
         // let options = self.get_options().await;
         // let save_path = &options.save_path;
@@ -120,12 +236,18 @@ impl Downloader {
         self.transition_state(DownloaderState::Running).await?;
 
         let downloader = self.clone();
-        println!("Downloading {} resources", resources.len());
+        println!("Downloading {} resources", optimized_resources.len());
 
         let reporter = self.reporter.clone();
         tokio::spawn(async move {
-            if let Err(e) = downloader.download_multi(resources).await {
-                reporter.operation_result(OperationType::Download, 500, format!("Download failed: {}", e)).await.ok();
+            if let Err(e) = downloader.download_multi(optimized_resources).await {
+                reporter
+                    .operation_result(
+                        OperationType::Download,
+                        500,
+                        format!("Download failed: {}", e)
+                    ).await
+                    .ok();
                 eprintln!("Download failed: {}", e);
             }
         });
@@ -151,7 +273,7 @@ impl Downloader {
         let options = self.get_options().await;
         // 获取基础保存目录
         let base_dir = PathBuf::from(&options.save_path);
-        
+
         let template = options.path_policy.template.as_deref().unwrap_or("");
         let dir_template = options.path_policy.dir_template.as_deref().unwrap_or("");
         let max_length = options.path_policy.max_length.unwrap_or(255);
@@ -159,10 +281,20 @@ impl Downloader {
         // 步骤1：确定文件名
         let filename = match options.path_policy.naming.as_str() {
             "auto" => auto_filename(resolved, meta).await?,
-            "custom" => custom_filename(resource, resolved, &TemplateRenderer::new(),meta,template, max_length).await?,
-            _ => return Err("Invalid naming policy".into()),
+            "custom" =>
+                custom_filename(
+                    resource,
+                    resolved,
+                    &TemplateRenderer::new(),
+                    meta,
+                    template,
+                    max_length
+                ).await?,
+            _ => {
+                return Err("Invalid naming policy".into());
+            }
         };
-        
+
         // 步骤2：确定目录结构
         let subdir = match options.path_policy.organization.as_str() {
             "flat" => PathBuf::new(),
@@ -171,7 +303,7 @@ impl Downloader {
             "custom" => {
                 let path_buf = PathBuf::from(&filename);
                 let extension = path_buf.extension().map(|e| e.to_str().unwrap_or_default());
-                    
+
                 let context = TemplateContext {
                     url: &resolved.url,
                     domain: None,
@@ -180,49 +312,60 @@ impl Downloader {
                     meta,
                     download_time: chrono::Utc::now(),
                     custom_data: None,
-                };    
+                };
                 custom_directory(dir_template, &context, &TemplateRenderer::new()).await?
-            },
-            _ => return Err("Invalid organization policy".into()),
+            }
+            _ => {
+                return Err("Invalid organization policy".into());
+            }
         };
-        
+
         // 步骤3：构建完整路径
         let mut full_path = base_dir.join(subdir).join(filename);
-        
+
         // 步骤4：处理路径冲突
         full_path = self.handle_conflict(full_path).await?;
-        
+
         Ok(full_path)
     }
-
-
 
     async fn handle_conflict(&self, mut path: PathBuf) -> Result<PathBuf> {
         let mut counter = 1;
         let original_path = path.clone();
         let options = self.get_options().await;
-        
+
         while path.exists() {
             match options.path_policy.conflict.as_str() {
-                "overwrite" => break,
+                "overwrite" => {
+                    break;
+                }
                 "rename" => {
-                    let stem = original_path.file_stem().unwrap_or_default().to_str().unwrap_or_default();
-                    let ext = original_path.extension()
+                    let stem = original_path
+                        .file_stem()
+                        .unwrap_or_default()
+                        .to_str()
+                        .unwrap_or_default();
+                    let ext = original_path
+                        .extension()
                         .map(|e| format!(".{}", e.to_str().unwrap_or_default()))
                         .unwrap_or_default();
-                    
+
                     path.set_file_name(format!("{}_{}{}", stem, counter, ext));
                     counter += 1;
                 }
-                "error" => return Err("File already exists".into()),
-                _ => return Err("Invalid conflict policy".into()),
+                "error" => {
+                    return Err("File already exists".into());
+                }
+                _ => {
+                    return Err("Invalid conflict policy".into());
+                }
             }
         }
         Ok(path)
     }
     pub async fn download_multi(
         &self,
-        resources: Vec<DownloadResource>,
+        resources: Vec<DownloadResource>
         // task_ids: Vec<u32>,
         // urls: Vec<String>,
         // concurrency_limit: usize
@@ -234,10 +377,10 @@ impl Downloader {
         let concurrency_limit = options.concurrency as usize;
         let base_path = PathBuf::from(&options.save_path);
 
-        let tasks = resources.into_iter().map(async |resource|  {
+        let tasks = resources.into_iter().map(async |resource| {
             // let resolved = self.resolver.resolve(&resource).await?;
             // let file_path = self.generate_path(&resource, &resolved).await?;
-            
+
             // let task = DownloadTask::new(
             //     resource,
             //     file_path,
@@ -246,13 +389,12 @@ impl Downloader {
             //         // ...其他元数据
             //     }
             // );
-            
+
             // self.tasks.write().await.insert(task.task_id(), task.clone());
             // let resolved = self.resolver.resolve(&resource).await?;
             // self.download_task(resource, &base_path).await
-            match self.download_task(resource,&base_path).await {
-                Ok(_) => {
-                }
+            match self.download_task(resource, &base_path).await {
+                Ok(_) => {}
                 Err(e) => {
                     eprintln!("Failed to download resource: {}", e);
                 }
@@ -285,10 +427,8 @@ impl Downloader {
 
         // tokio::fs::remove_file(PathBuf::from(&options.save_path).join("downloading.json")).await?;
 
-
         Ok(())
     }
-
 
     async fn download_task(
         &self,
@@ -318,18 +458,16 @@ impl Downloader {
             !response.status().is_success() &&
             response.status() != reqwest::StatusCode::PARTIAL_CONTENT
         {
-            return Err(
-                format!("HTTP error: {}", response.status()).into()
-            );
+            return Err(format!("HTTP error: {}", response.status()).into());
         }
 
         let meta = DownloadMeta::from_headers(response.headers());
 
-        let file_path = self.generate_path(&resource, &resolved,&meta).await?;
+        let file_path = self.generate_path(&resource, &resolved, &meta).await?;
 
         let total_size = response.content_length().unwrap_or(0) + current_len;
 
-        let task_id :u32;
+        let task_id: u32;
         match resource {
             DownloadResource::Url(url) => {
                 // 根据字符串生成随机3232
@@ -343,9 +481,15 @@ impl Downloader {
                 // 根据拼接后的字符串生成随机3232
                 task_id = generate_task_id(&params.join(""));
             }
+            DownloadResource::Resolved(resolved) => {
+                // 根据url生成随机3232
+                task_id = generate_task_id(&resolved.url);
+            }
         }
+        
+        let task_url = resolved.url.clone();
 
-        let task = DownloadTask::new(task_id, file_path.clone(), total_size);
+        let task = DownloadTask::new(task_id, task_url, file_path.clone(), total_size);
 
         {
             self.tasks.write().await.push(task.clone());
@@ -365,7 +509,6 @@ impl Downloader {
         let start_time = tokio::time::Instant::now();
 
         while let Some(chunk) = stream.next().await {
-
             let global_state = self.state.read().await;
 
             match *global_state {
@@ -376,7 +519,7 @@ impl Downloader {
                 DownloaderState::Suspended => {
                     task.pause().await?;
                     let mut state_rx = self.state_notifier.subscribe();
-                    
+
                     drop(global_state);
                     loop {
                         tokio::select! {
@@ -406,23 +549,19 @@ impl Downloader {
 
                         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-     
                         let state = self.state.read().await;
                         if *state != DownloaderState::Suspended {
                             break;
                         }
                     }
 
-
                     task.resume().await?; // 应该就没事了
-
                 }
                 DownloaderState::Stopped => {
                     task.cancel().await?;
-                    self.reporter.finish_task(task_id,DownloadResult::Canceled).await?;
+                    self.reporter.finish_task(task_id, DownloadResult::Canceled).await?;
                     self.save_state().await?;
                     return Ok(());
-                    
                 }
                 DownloaderState::Running => {}
             }
@@ -435,7 +574,6 @@ impl Downloader {
                     task.start().await?;
                 }
                 TaskState::Paused => {
-
                     let mut state_rx = self.state_notifier.subscribe();
                     drop(task_state);
                     loop {
@@ -460,10 +598,9 @@ impl Downloader {
                                 }
                             } => {}
                         }
-                        
+
                         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-                       
                         let state = self.state.read().await;
                         if *state != DownloaderState::Suspended {
                             break;
@@ -471,7 +608,7 @@ impl Downloader {
                     }
                 }
                 TaskState::Canceled => {
-                    self.reporter.finish_task(task_id,DownloadResult::Canceled).await?;
+                    self.reporter.finish_task(task_id, DownloadResult::Canceled).await?;
                     drop(task_state);
                     self.save_state().await?;
                     return Ok(());
@@ -499,9 +636,7 @@ impl Downloader {
             }
 
             file.write_all(&chunk).await?;
-        } 
-
-
+        }
 
         let metadata = tokio::fs::metadata(&base_path).await?;
         if metadata.len() == total_size {
@@ -513,7 +648,7 @@ impl Downloader {
             }).await?;
         } else {
             task.transition_state(TaskState::Failed).await?;
-            self.reporter.finish_task(task_id, DownloadResult::Failed{
+            self.reporter.finish_task(task_id, DownloadResult::Failed {
                 error: "Downloaded size does not match expected size".to_string(),
                 retryable: true,
             }).await?;
@@ -561,6 +696,7 @@ impl Downloader {
             let progress = task.progress.lock().await;
             let task_state = TaskStateRecord {
                 id: task.id,
+                url: task.url.clone(),
                 downloaded_bytes: progress.bytes_downloaded,
                 total_bytes: progress.total_bytes,
                 file_path: task.file_path.clone(),
@@ -588,6 +724,7 @@ impl Downloader {
         for task_state in state.tasks {
             let task = DownloadTask::new(
                 task_state.id,
+                task_state.url,
                 task_state.file_path,
                 task_state.total_bytes
             );
@@ -616,6 +753,7 @@ impl Downloader {
             for task_state in state.tasks {
                 let task = DownloadTask::new(
                     task_state.id,
+                    task_state.url,
                     task_state.file_path,
                     task_state.total_bytes
                 );
@@ -654,8 +792,6 @@ impl Downloader {
         }
     }
 }
-
-
 
 // Convenience function for multi-download
 // pub async fn download_beatmaps(
