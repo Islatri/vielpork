@@ -43,7 +43,8 @@ dotenvy = "0.15.7"
 
 
 [features]
-default = ["full"]
+default = ["tui","cli"]
 full = ["tui","cli"]
 tui = ["indicatif"]
 cli = []
+osu = []

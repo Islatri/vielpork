@@ -103,8 +103,6 @@ impl Downloader {
             resources.into_iter().map(async |resource| { resolver.resolve(&resource).await })
         ).await;
 
-        // 只需要比较resolved即可
-
         for resolved in resolved_resources.iter() {
             match resolved {
                 Ok(resolved) => {
@@ -112,7 +110,7 @@ impl Downloader {
                     match task {
                         Some(t) => {
                             if t.state != TaskState::Completed || t.state != TaskState::Canceled {
-                                
+                                optimized.push(DownloadResource::Resolved(resolved.clone()));
                             }
                         }
                         None => {
@@ -124,65 +122,6 @@ impl Downloader {
             }
         }
 
-        // for (resource, resolved) in resources.iter().zip(resolved_resources.iter()) {
-        //     match resource {
-        //         DownloadResource::Url(url) => {
-        //             let task = state.tasks.iter().find(|t| t.url == *url);
-        //             match task {
-        //                 Some(t) => {
-        //                     if t.state == TaskState::Completed || t.state == TaskState::Canceled {
-        //                         continue;
-        //                     }
-        //                 }
-        //                 None => {
-        //                     optimized.push(DownloadResource::Url(url.clone()));
-        //                 }
-        //             }
-        //         }
-        //         DownloadResource::Id(id) => {
-        //             let task = state.tasks.iter().find(|t| t.id == *id);
-        //             match task {
-        //                 Some(t) => {
-        //                     if t.state == TaskState::Completed || t.state == TaskState::Canceled {
-        //                         continue;
-        //                     }
-        //                 }
-        //                 None => {
-        //                     optimized.push(DownloadResource::Id(*id));
-        //                 }
-        //             }
-        //         }
-        //         DownloadResource::Params(params) => {
-        //             optimized.push(DownloadResource::Params(params.clone()));
-        //         }
-        //     }
-        // }
-
-        // for resource in resources {
-        //     match resource {
-        //         DownloadResource::Url(url) => {
-
-        //             // 检查url是否在state中且已完成或取消
-        //             // let task = state.tasks.iter().find(|t| t.url == url);
-        //             // match task {
-        //             //     Some(t) => {
-        //             //         if t.state == TaskState::Completed || t.state == TaskState::Canceled {
-        //             //             continue;
-        //             //         }
-        //             //     }
-        //             //     None => {
-        //             //         optimized.push(DownloadResource::Url(url));
-        //             //     }
-        //             // }
-
-        //         }
-        //         DownloadResource::Id(id) => {
-        //         }
-        //         DownloadResource::Params(params) => {
-        //             optimized.push(DownloadResource::Params(params));
-        //         }
-        //     }
-        // }
         optimized
     }
     pub async fn start(&self, resources: Vec<DownloadResource>) -> Result<()> {
@@ -200,38 +139,6 @@ impl Downloader {
             optimized_resources = resources;
         }
 
-        // let options = self.get_options().await;
-        // let save_path = &options.save_path;
-        // let state_path = PathBuf::from(save_path).join("downloading.json");
-        // let new_ids: Vec<u32>;
-        // if state_path.exists() {
-        //     let contents = tokio::fs::read_to_string(&state_path).await?;
-        //     let state: PersistentState = serde_json::from_str(&contents)?;
-        //     self.load_state(state).await?;
-        //     new_ids = futures::future
-        //         ::join_all(
-        //             task_ids.into_iter().map(async |id: u32| {
-        //                 let tasks = self.tasks.read().await;
-        //                 let task = tasks.iter().find(|t| t.id == id);
-        //                 match task {
-        //                     Some(t) => {
-        //                         let state = t.state.read().await;
-        //                         if *state != TaskState::Completed || *state != TaskState::Canceled {
-        //                             Some(id)
-        //                         } else {
-        //                             None
-        //                         }
-        //                     }
-        //                     None => Some(id),
-        //                 }
-        //             })
-        //         ).await
-        //         .into_iter()
-        //         .filter_map(|id| id)
-        //         .collect();
-        // } else {
-        //     new_ids = task_ids;
-        // }
 
         self.transition_state(DownloaderState::Running).await?;
 
@@ -366,9 +273,6 @@ impl Downloader {
     pub async fn download_multi(
         &self,
         resources: Vec<DownloadResource>
-        // task_ids: Vec<u32>,
-        // urls: Vec<String>,
-        // concurrency_limit: usize
     ) -> Result<()> {
         let options = self.get_options().await;
         if options.create_dirs {
@@ -378,21 +282,7 @@ impl Downloader {
         let base_path = PathBuf::from(&options.save_path);
 
         let tasks = resources.into_iter().map(async |resource| {
-            // let resolved = self.resolver.resolve(&resource).await?;
-            // let file_path = self.generate_path(&resource, &resolved).await?;
 
-            // let task = DownloadTask::new(
-            //     resource,
-            //     file_path,
-            //     DownloadMeta {
-            //         content_type: resolved.content_type,
-            //         // ...其他元数据
-            //     }
-            // );
-
-            // self.tasks.write().await.insert(task.task_id(), task.clone());
-            // let resolved = self.resolver.resolve(&resource).await?;
-            // self.download_task(resource, &base_path).await
             match self.download_task(resource, &base_path).await {
                 Ok(_) => {}
                 Err(e) => {
@@ -402,24 +292,7 @@ impl Downloader {
         });
 
         let downloads = futures::stream
-            ::iter(
-                tasks
-                // task_ids.into_iter().map(async |task_id| {
-                //     let file_path = PathBuf::from(&options.save_path).join(
-                //         format!("{}.osz", task_id)
-                //     );
-
-                //     let url = urls.get(task_id as usize).unwrap_or(&default_url);
-
-                //     match self.download_task(url,task_id,  &file_path).await {
-                //         Ok(_) => {
-                //         }
-                //         Err(e) => {
-                //             eprintln!("Failed to download beatmapset {}: {}", task_id, e);
-                //         }
-                //     }
-                // })
-            )
+            ::iter(tasks)
             .buffer_unordered(concurrency_limit)
             .collect::<Vec<_>>();
 
@@ -486,7 +359,7 @@ impl Downloader {
                 task_id = generate_task_id(&resolved.url);
             }
         }
-        
+
         let task_url = resolved.url.clone();
 
         let task = DownloadTask::new(task_id, task_url, file_path.clone(), total_size);
@@ -794,76 +667,89 @@ impl Downloader {
 }
 
 // Convenience function for multi-download
-// pub async fn download_beatmaps(
-//     task_ids: Vec<u32>,
-//     concurrency_limit: usize,
-//     options: DownloadOptions,
-//     resolver:Box<dyn ResourceResolver>,
-//     reporter:Box<dyn CombinedReporter>
+pub async fn download_urls(
+    resources: Vec<DownloadResource>,
+    options: DownloadOptions,
+    resolver:Box<dyn ResourceResolver>,
+    reporter:Box<dyn CombinedReporter>
 
-// ) -> Result<()> {
-//     let downloader = Downloader::new(options,resolver,reporter);
-//     downloader.download_multi(task_ids,vec![], concurrency_limit).await
-// }
+) -> Result<()> {
+    let downloader = Downloader::new(options,resolver,reporter);
+    downloader.download_multi(resources).await
+}
 
 // Quick multi-download with default settings
-// pub async fn quick_download_multi(
-//     task_ids: Vec<u32>,
-//     concurrency_limit: usize,
-//     resolver:Box<dyn ResourceResolver>,
-//     reporter:Box<dyn CombinedReporter>
-// ) -> Result<()> {
+pub async fn quick_download_multi(
+    resources: Vec<DownloadResource>,
+    resolver:Box<dyn ResourceResolver>,
+    reporter:Box<dyn CombinedReporter>
+) -> Result<()> {
 
-//     let config = DownloadOptions::default()
-//         .with_save_path("fetch".to_string());
+    let config = DownloadOptions::default()
+        .with_save_path("fetch".to_string());
 
-//     download_beatmaps(task_ids, concurrency_limit, config,resolver,reporter).await
-// }
+    download_urls(resources, config,resolver,reporter).await
+}
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use tokio::sync::Mutex;
-//     use crate::reporters::tui::TuiReporter;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::Mutex;
+    use crate::reporters::tui::TuiReporter;
+    use crate::resolvers::url::UrlResolver;
 
-//     #[tokio::test]
-//     async fn test_download_single_no_osu_login() {
-//         let options = DownloadOptions::default()
-//             .with_save_path("fetch".to_string());
+    #[tokio::test]
+    async fn test_download_single() {
+        let options = DownloadOptions::default()
+            .with_save_path("fetch".to_string());
 
-//         let downloader = Downloader::new(options,Box::new(TuiReporter::new()));
-//         downloader.download_task("",4587512,&PathBuf::new()).await.unwrap();
-//     }
+        let resources = vec![
+            DownloadResource::Url("https://www.google.com".to_string()),
+            DownloadResource::Url("https://www.bing.com".to_string()),
+            DownloadResource::Url("https://www.baidu.com".to_string()),
+        ];
 
-//     #[tokio::test]
-//     async fn test_download_multi() {
-//         let options = DownloadOptions::default()
-//             .with_save_path("fetch".to_string());
+        let downloader = Downloader::new(options,Box::new(UrlResolver::new()),Box::new(TuiReporter::new()));
+        downloader.download_task(resources[0].clone(),&PathBuf::from("fetch")).await.unwrap();
+    }
 
-//         let downloader = Downloader::new(options,Box::new(TuiReporter::new()));
-//         downloader.start(vec![1234567, 114514, 1919810],vec![]).await.unwrap();
-//     }
-//     #[tokio::test]
-//     async fn test_download_control() {
-//         let options = DownloadOptions::default()
-//             .with_save_path("fetch".to_string())
-//             .with_concurrency(2);
+    #[tokio::test]
+    async fn test_download_multi() {
+        let options = DownloadOptions::default()
+            .with_save_path("fetch".to_string());
+        let resources = vec![
+            DownloadResource::Url("https://www.google.com".to_string()),
+            DownloadResource::Url("https://www.bing.com".to_string()),
+            DownloadResource::Url("https://www.baidu.com".to_string()),
+        ];
+        let downloader = Downloader::new(options,Box::new(UrlResolver::new()),Box::new(TuiReporter::new()));
+        downloader.start(resources).await.unwrap();
+    }
+    #[tokio::test]
+    async fn test_download_control() {
+        let options = DownloadOptions::default()
+            .with_save_path("fetch".to_string())
+            .with_concurrency(2);
+        let resources = vec![
+            DownloadResource::Url("https://www.google.com".to_string()),
+            DownloadResource::Url("https://www.bing.com".to_string()),
+            DownloadResource::Url("https://www.baidu.com".to_string()),
+        ];
+        let downloader = Arc::new(Mutex::new(Downloader::new(options,Box::new(UrlResolver::new()),Box::new(TuiReporter::new()))));
 
-//         let downloader = Arc::new(Mutex::new(Downloader::new(options,Box::new(TuiReporter::new()))));
+        // 控制下载启停，断点续联
+        let downloader_clone = Arc::clone(&downloader);
+        tokio::spawn(async move {
+            downloader_clone.lock().await.start(resources).await.unwrap();
+        });
 
-//         // 控制下载启停，断点续联
-//         let downloader_clone = Arc::clone(&downloader);
-//         tokio::spawn(async move {
-//             downloader_clone.lock().await.start(vec![1234567, 114514, 1919810],vec![]).await.unwrap();
-//         });
+        // 但是他是直接顺序执行了，没有暂停下载，哦哦，可能是单点暂停还没写，但是之前设置了单线程
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-//         // 但是他是直接顺序执行了，没有暂停下载，哦哦，可能是单点暂停还没写，但是之前设置了单线程
-//         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
-//         downloader.lock().await.pause().await.unwrap();
-//         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-//         downloader.lock().await.resume().await.unwrap();
-//         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-//         downloader.lock().await.stop().await.unwrap();
-//     }
-// }
+        downloader.lock().await.pause().await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        downloader.lock().await.resume().await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        downloader.lock().await.stop().await.unwrap();
+    }
+}
