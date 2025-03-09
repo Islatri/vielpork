@@ -1,3 +1,4 @@
+use super::structs::ResolvedResource;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
@@ -89,4 +90,20 @@ impl std::fmt::Display for OperationType {
             OperationType::SetRateLimit(n) => write!(f, "Set rate limit to {} B/s", n),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FileChecksum {
+    MD5(String),
+    SHA1(String),
+    SHA256(String),
+    Custom { algorithm: String, value: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DownloadResource {
+    Url(String),
+    Id(String), 
+    Params(Vec<String>),
+    Resolved(ResolvedResource),
 }

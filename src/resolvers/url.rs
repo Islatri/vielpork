@@ -1,7 +1,8 @@
 
 use crate::error::Result;
 use crate::base::traits::ResourceResolver;
-use crate::base::structs::{DownloadResource, ResolvedResource};
+use crate::base::structs::ResolvedResource;
+use crate::base::enums::DownloadResource;
 use async_trait::async_trait;
 
 #[derive(Debug,Clone)]

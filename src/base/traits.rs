@@ -1,7 +1,7 @@
 
 use crate::error::Result;
-use super::structs::{DownloadProgress, DownloadResource, ResolvedResource};
-use super::enums::{DownloadResult, OperationType};
+use super::structs::{DownloadProgress,  ResolvedResource};
+use super::enums::{DownloadResult,DownloadResource, OperationType};
 use async_trait::async_trait;
 
 #[async_trait]

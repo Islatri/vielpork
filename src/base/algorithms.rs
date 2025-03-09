@@ -1,5 +1,6 @@
 use crate::error::Result;
-use crate::base::structs::{ DownloadMeta, ResolvedResource, DownloadResource };
+use crate::base::enums::DownloadResource;
+use crate::base::structs::{ DownloadMeta, ResolvedResource };
 use crate::template::{ TemplateRenderer, TemplateContext };
 // use crate::hash::{HashSource, HashFormat};
 
@@ -128,6 +129,7 @@ pub async fn auto_filename(resolved: &ResolvedResource, meta: &DownloadMeta) -> 
             .map(|(_, v)| v)
     {
         if let Some(filename) = parse_content_disposition(disposition) {
+            println!("Content-Disposition: {}", filename);
             return Ok(filename);
         }
     }
@@ -139,8 +141,32 @@ pub async fn auto_filename(resolved: &ResolvedResource, meta: &DownloadMeta) -> 
             .ok()
             .and_then(|u| u.path_segments().and_then(|s| s.last().map(|s| s.to_string())))
     {
-        return Ok(url_filename.to_string());
+        
+        if url_filename.is_empty() {
+            return generate_random_filename(meta);
+        } else{
+            return Ok(url_filename.to_string());
+        }
+        
     }
+
+    // if let Some(url) = reqwest::Url::parse(&resolved.url).ok() {
+    //     println!("URL 解析成功: {:?}", url);
+    //     if let Some(segments) = url.path_segments() {
+    //         println!("路径段: {:?}", segments.clone().collect::<Vec<_>>());
+    //         if let Some(last_segment) = segments.last() {
+    //             let url_filename = last_segment.to_string();
+    //             println!("URL Path: {}", url_filename); // 进入了这里，但是url_filename是空的
+    //             return Ok(url_filename);
+    //         } else {
+    //             println!("路径段的最后一个部分为空");
+    //         }
+    //     } else {
+    //         println!("路径段为空");
+    //     }
+    // } else {
+    //     println!("URL解析失败");
+    // }
 
     // 生成随机文件名
     generate_random_filename(meta)
@@ -224,65 +250,6 @@ pub async fn custom_filename(
 
     Ok(final_name)
 }
-
-// Deprecated
-
-// async fn hash_filename(
-//     resource: &DownloadResource,
-//     meta: &DownloadMeta,
-// ) -> Result<String> {
-//     // 获取哈希配置参数
-//     let hash_config = self.options
-//         .path_policy
-//         .hash_config
-//         .as_ref()
-//         .ok_or("Hash config is not set")?;
-
-//     // 根据策略生成哈希源
-//     let hash_input = match hash_config.source {
-//         HashSource::ResourceIdentifier => {
-//             let mut hasher = hash_config.algorithm.create_hasher();
-//             match resource {
-//                 DownloadResource::Url(url) => hasher.update(url.as_bytes()),
-//                 DownloadResource::Id(id) => hasher.update(id.as_bytes()),
-//             }
-//             hasher.finalize()
-//         }
-//         HashSource::ContentPreview => {
-//             // 预下载前1MB计算哈希（需实现range请求）
-//             let preview = self.fetch_content_preview(resource, 1024 * 1024).await?;
-//             let mut hasher = hash_config.algorithm.create_hasher();
-//             hasher.update(&preview);
-//             hasher.finalize()
-//         }
-//         HashSource::FullContent => {
-//             // 注意：此模式需要先下载完整内容
-//             return Err("FullContent hash source is not implemented yet".into());
-//         }
-//     };
-
-//     // 获取文件扩展名
-//     let ext = meta.suggested_filename
-//         .as_ref()
-//         .and_then(|f| Path::new(f).extension())
-//         .and_then(|e| e.to_str())
-//         .unwrap_or_default();
-
-//     // 格式化输出
-//     let filename = match hash_config.format {
-//         HashFormat::Hex => format!("{}_{}", hash_input, ext),
-//         HashFormat::Base64 => {
-//             let base64 = base64_simd::STANDARD;
-//             let b64 = base64.encode_to_string(hash_input);
-//             format!("{}_{}", b64, ext)
-//         }
-//         HashFormat::Custom(ref fmt) => fmt
-//             .replace("{hash}", &hex::encode(hash_input))
-//             .replace("{ext}", ext),
-//     };
-
-//     Ok(filename)
-// }
 
 /// 生成自定义目录结构
 pub async fn custom_directory(

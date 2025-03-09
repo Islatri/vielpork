@@ -1,14 +1,14 @@
 use crate::task::{ DownloadTask, PersistentState, TaskStateRecord };
 use crate::base::traits::{ CombinedReporter, ResourceResolver };
 use crate::base::algorithms::rate_remaining_progress;
-use crate::base::enums::{ DownloadResult, DownloaderState, OperationType, TaskState };
-use crate::base::structs::{
+use crate::base::enums::{
+    DownloadResult,
+    DownloaderState,
     DownloadResource,
-    DownloadProgress,
-    DownloadOptions,
-    ResolvedResource,
-    DownloadMeta,
+    OperationType,
+    TaskState,
 };
+use crate::base::structs::{ DownloadProgress, DownloadOptions, ResolvedResource, DownloadMeta };
 use crate::error::Result;
 use crate::base::algorithms::{
     generate_task_id,
@@ -139,7 +139,6 @@ impl Downloader {
             optimized_resources = resources;
         }
 
-
         self.transition_state(DownloaderState::Running).await?;
 
         let downloader = self.clone();
@@ -155,7 +154,6 @@ impl Downloader {
                         format!("Download failed: {}", e)
                     ).await
                     .ok();
-                eprintln!("Download failed: {}", e);
             }
         });
         Ok(())
@@ -180,6 +178,8 @@ impl Downloader {
         let options = self.get_options().await;
         // 获取基础保存目录
         let base_dir = PathBuf::from(&options.save_path);
+
+        // println!("options.path_policy {:?}", options.path_policy);
 
         let template = options.path_policy.template.as_deref().unwrap_or("");
         let dir_template = options.path_policy.dir_template.as_deref().unwrap_or("");
@@ -270,10 +270,7 @@ impl Downloader {
         }
         Ok(path)
     }
-    pub async fn download_multi(
-        &self,
-        resources: Vec<DownloadResource>
-    ) -> Result<()> {
+    pub async fn download_multi(&self, resources: Vec<DownloadResource>) -> Result<()> {
         let options = self.get_options().await;
         if options.create_dirs {
             tokio::fs::create_dir_all(&options.save_path).await?;
@@ -282,11 +279,13 @@ impl Downloader {
         let base_path = PathBuf::from(&options.save_path);
 
         let tasks = resources.into_iter().map(async |resource| {
-
             match self.download_task(resource, &base_path).await {
                 Ok(_) => {}
                 Err(e) => {
-                    eprintln!("Failed to download resource: {}", e);
+                    self.reporter
+                        .operation_result(OperationType::Download, 500, format!("Failed to download resource: {}", e))
+                        .await
+                        .ok();
                 }
             }
         });
@@ -305,8 +304,6 @@ impl Downloader {
 
     async fn download_task(
         &self,
-        // url: &str,
-        // task_id: u32,
         resource: DownloadResource,
         base_path: &PathBuf
     ) -> Result<()> {
@@ -336,7 +333,11 @@ impl Downloader {
 
         let meta = DownloadMeta::from_headers(response.headers());
 
+        // println!("Meta {:?}", meta);
+
         let file_path = self.generate_path(&resource, &resolved, &meta).await?;
+
+        // println!("Downloading {} to {:?}", resolved.url, file_path);
 
         let total_size = response.content_length().unwrap_or(0) + current_len;
 
@@ -374,12 +375,14 @@ impl Downloader {
             ::new()
             .create(true)
             .append(true)
-            .open(&base_path).await?;
+            .open(&file_path).await?;
 
         let mut downloaded = current_len;
         let mut stream = response.bytes_stream();
 
         let start_time = tokio::time::Instant::now();
+
+        // println!("Start downloading");
 
         while let Some(chunk) = stream.next().await {
             let global_state = self.state.read().await;
@@ -511,11 +514,11 @@ impl Downloader {
             file.write_all(&chunk).await?;
         }
 
-        let metadata = tokio::fs::metadata(&base_path).await?;
+        let metadata = tokio::fs::metadata(&file_path).await?;
         if metadata.len() == total_size {
             task.transition_state(TaskState::Completed).await?;
             self.reporter.finish_task(task_id, DownloadResult::Success {
-                path: base_path.clone(),
+                path: file_path.clone(),
                 size: total_size,
                 duration: start_time.elapsed(),
             }).await?;
@@ -670,25 +673,22 @@ impl Downloader {
 pub async fn download_urls(
     resources: Vec<DownloadResource>,
     options: DownloadOptions,
-    resolver:Box<dyn ResourceResolver>,
-    reporter:Box<dyn CombinedReporter>
-
+    resolver: Box<dyn ResourceResolver>,
+    reporter: Box<dyn CombinedReporter>
 ) -> Result<()> {
-    let downloader = Downloader::new(options,resolver,reporter);
+    let downloader = Downloader::new(options, resolver, reporter);
     downloader.download_multi(resources).await
 }
 
 // Quick multi-download with default settings
 pub async fn quick_download_multi(
     resources: Vec<DownloadResource>,
-    resolver:Box<dyn ResourceResolver>,
-    reporter:Box<dyn CombinedReporter>
+    resolver: Box<dyn ResourceResolver>,
+    reporter: Box<dyn CombinedReporter>
 ) -> Result<()> {
+    let config = DownloadOptions::default().with_save_path("fetch".to_string());
 
-    let config = DownloadOptions::default()
-        .with_save_path("fetch".to_string());
-
-    download_urls(resources, config,resolver,reporter).await
+    download_urls(resources, config, resolver, reporter).await
 }
 
 #[cfg(test)]
@@ -700,29 +700,35 @@ mod tests {
 
     #[tokio::test]
     async fn test_download_single() {
-        let options = DownloadOptions::default()
-            .with_save_path("fetch".to_string());
+        let options = DownloadOptions::default().with_save_path("fetch".to_string());
 
         let resources = vec![
             DownloadResource::Url("https://www.google.com".to_string()),
             DownloadResource::Url("https://www.bing.com".to_string()),
-            DownloadResource::Url("https://www.baidu.com".to_string()),
+            DownloadResource::Url("https://www.baidu.com".to_string())
         ];
 
-        let downloader = Downloader::new(options,Box::new(UrlResolver::new()),Box::new(TuiReporter::new()));
-        downloader.download_task(resources[0].clone(),&PathBuf::from("fetch")).await.unwrap();
+        let downloader = Downloader::new(
+            options,
+            Box::new(UrlResolver::new()),
+            Box::new(TuiReporter::new())
+        );
+        downloader.download_task(resources[0].clone(), &PathBuf::from("fetch")).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_download_multi() {
-        let options = DownloadOptions::default()
-            .with_save_path("fetch".to_string());
+        let options = DownloadOptions::default().with_save_path("fetch".to_string());
         let resources = vec![
             DownloadResource::Url("https://www.google.com".to_string()),
             DownloadResource::Url("https://www.bing.com".to_string()),
-            DownloadResource::Url("https://www.baidu.com".to_string()),
+            DownloadResource::Url("https://www.baidu.com".to_string())
         ];
-        let downloader = Downloader::new(options,Box::new(UrlResolver::new()),Box::new(TuiReporter::new()));
+        let downloader = Downloader::new(
+            options,
+            Box::new(UrlResolver::new()),
+            Box::new(TuiReporter::new())
+        );
         downloader.start(resources).await.unwrap();
     }
     #[tokio::test]
@@ -733,17 +739,19 @@ mod tests {
         let resources = vec![
             DownloadResource::Url("https://www.google.com".to_string()),
             DownloadResource::Url("https://www.bing.com".to_string()),
-            DownloadResource::Url("https://www.baidu.com".to_string()),
+            DownloadResource::Url("https://www.baidu.com".to_string())
         ];
-        let downloader = Arc::new(Mutex::new(Downloader::new(options,Box::new(UrlResolver::new()),Box::new(TuiReporter::new()))));
+        let downloader = Arc::new(
+            Mutex::new(
+                Downloader::new(options, Box::new(UrlResolver::new()), Box::new(TuiReporter::new()))
+            )
+        );
 
-        // 控制下载启停，断点续联
         let downloader_clone = Arc::clone(&downloader);
         tokio::spawn(async move {
             downloader_clone.lock().await.start(resources).await.unwrap();
         });
 
-        // 但是他是直接顺序执行了，没有暂停下载，哦哦，可能是单点暂停还没写，但是之前设置了单线程
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
         downloader.lock().await.pause().await.unwrap();

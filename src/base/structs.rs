@@ -1,5 +1,5 @@
 use super::algorithms::parse_content_disposition;
-use super::enums::AuthMethod;
+use super::enums::{AuthMethod, FileChecksum};
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -212,21 +212,6 @@ impl DownloadMeta {
 }
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum FileChecksum {
-    MD5(String),
-    SHA1(String),
-    SHA256(String),
-    Custom { algorithm: String, value: String },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DownloadResource {
-    Url(String),
-    Id(String), 
-    Params(Vec<String>),
-    Resolved(ResolvedResource),
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedResource {
