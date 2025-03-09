@@ -24,7 +24,6 @@
 - 🔧 Customizable resolution strategies for different network scenarios
 - ⏯️ Pause/resume functionality with checkpoint support
 
-
 ```mermaid
 stateDiagram-v2
     [*] --> GlobalInit
@@ -50,7 +49,11 @@ stateDiagram-v2
     GlobalStopped --> TaskCanceled : propagate
 ```
 
-# Documentation
+# Related Projects
+
+- [osynic_downloader](https://crates.io/crates/osynic_downloader): A osu beatmapsets downloader lib & TUI application based on vielpork.
+
+# Documentation (Under Construction)
 
 1. English: [https://hakochest.github.io/vielpork-en/](https://hakochest.github.io/vielpork-en/)
 2. 中文: [https://hakochest.github.io/vielpork-cn/](https://hakochest.github.io/vielpork-cn/)
