@@ -1,5 +1,5 @@
 <p align="center" dir="auto">
-    <img style="height:240px;width:240px"  src="https://s2.loli.net/2025/03/09/ho9EQVWa8zYxP2J.jpg" alt="Logo逃走啦~"/>
+    <img style="height:240px;width:280px"  src="https://s2.loli.net/2025/03/09/ho9EQVWa8zYxP2J.jpg" alt="Logo逃走啦~"/>
 </p>
 
 <h1 align="center" tabindex="-1" class="heading-element" dir="auto">Vielpork</h1>
@@ -33,10 +33,10 @@ report的vielpork很接近，也还不错
 stateDiagram-v2
     [*] --> GlobalInit
     GlobalInit --> GlobalRunning: start_all()
-    GlobalRunning --> GlobalPaused: pause_all()
-    GlobalPaused --> GlobalRunning: resume_all()
-    GlobalRunning --> GlobalCanceling: cancel_all()
-    GlobalCanceling --> [*]
+    GlobalRunning --> GlobalSuspended: pause_all()
+    GlobalSuspended --> GlobalRunning: resume_all()
+    GlobalRunning --> GlobalStopped: cancel_all()
+    GlobalStopped --> [*]
     
     state TaskStates {
         [*] --> TaskPending
