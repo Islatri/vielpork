@@ -4,7 +4,7 @@
 
 <p align="center">
   <h1 align="center">Vielpork 🚀</h1>
-  <p align="center">A high-performance multi-threaded HTTP downloader with extensible reporting</p>
+  <p align="center">A high-performance multi-threaded HTTP downloader with extensible reporting and resolution strategies.</p>
 </p>
 
 <p align="center">
@@ -24,6 +24,32 @@
 - 🔧 Customizable resolution strategies for different network scenarios
 - ⏯️ Pause/resume functionality with checkpoint support
 
+
+```mermaid
+stateDiagram-v2
+    [*] --> GlobalInit
+    GlobalInit --> GlobalRunning: start_all()
+    GlobalRunning --> GlobalSuspended: pause_all()
+    GlobalSuspended --> GlobalRunning: resume_all()
+    GlobalRunning --> GlobalStopped: cancel_all()
+    GlobalStopped --> [*]
+    
+    state TaskStates {
+        [*] --> TaskPending
+        TaskPending --> TaskDownloading: start_task()
+        TaskDownloading --> TaskPaused: pause_task()
+        TaskPaused --> TaskDownloading: resume_task()
+        TaskDownloading --> TaskCanceled: cancel_task()
+        TaskDownloading --> TaskCompleted: finish()
+        TaskPaused --> TaskCanceled: cancel_task()
+        TaskCanceled --> [*]
+        TaskCompleted --> [*]
+    }
+    
+    GlobalSuspended --> TaskPaused : propagate
+    GlobalStopped --> TaskCanceled : propagate
+```
+
 # Documentation
 
 1. English: [https://hakochest.github.io/vielpork-en/](https://hakochest.github.io/vielpork-en/)
@@ -35,15 +61,12 @@
 
 - **Multi-threaded Architecture**: Leverage Rust's async runtime for concurrent chunk downloads
 - **Extensible Reporting**:
-  - Built-in reporters: CLI progress bar, silent mode, JSON output, log file
+  - Built-in reporters: TUI progress bar, CLI broadcast mpsc channel
   - Custom reporter implementation via trait
 - **Smart Resolution**:
-  - Default strategies: Fixed chunk size, dynamic chunk allocation
   - Custom resolution logic through Resolver trait
 - **Recovery & Resilience**:
   - Resume interrupted downloads
-  - Configurable retry policies
-  - Checksum verification (MD5, SHA256)
 - **Progress Tracking**:
   - Real-time speed calculations
   - ETA estimation
@@ -141,28 +164,3 @@ You can see all traits at `vielpork::base::traits` and implement your own compon
 report的vielpork很接近，也还不错
 
 对于连续吃了一个星期免费粥的我来说，这个名字已经很好了
-
-```mermaid
-stateDiagram-v2
-    [*] --> GlobalInit
-    GlobalInit --> GlobalRunning: start_all()
-    GlobalRunning --> GlobalSuspended: pause_all()
-    GlobalSuspended --> GlobalRunning: resume_all()
-    GlobalRunning --> GlobalStopped: cancel_all()
-    GlobalStopped --> [*]
-    
-    state TaskStates {
-        [*] --> TaskPending
-        TaskPending --> TaskDownloading: start_task()
-        TaskDownloading --> TaskPaused: pause_task()
-        TaskPaused --> TaskDownloading: resume_task()
-        TaskDownloading --> TaskCanceled: cancel_task()
-        TaskDownloading --> TaskCompleted: finish()
-        TaskPaused --> TaskCanceled: cancel_task()
-        TaskCanceled --> [*]
-        TaskCompleted --> [*]
-    }
-    
-    GlobalSuspended --> TaskPaused : propagate
-    GlobalStopped --> TaskCanceled : propagate
-```
