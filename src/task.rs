@@ -18,7 +18,7 @@ pub struct PersistentState {
 
 #[derive(Serialize, Deserialize)]
 pub struct TaskStateRecord {
-    pub beatmapset_id: u32,
+    pub id: u32,
     pub downloaded_bytes: u64,
     pub total_bytes: u64,
     pub file_path: PathBuf,
@@ -27,7 +27,7 @@ pub struct TaskStateRecord {
 
 #[derive(Debug,Clone)]
 pub struct DownloadTask {
-    pub beatmapset_id: u32,
+    pub id: u32,
     handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     cancel_token: tokio_util::sync::CancellationToken,
     pub state: Arc<RwLock<TaskState>>,
@@ -37,9 +37,9 @@ pub struct DownloadTask {
 }
 
 impl DownloadTask {
-    pub fn new(beatmapset_id: u32, file_path: PathBuf, total_size: u64) -> Self {
+    pub fn new(id: u32, file_path: PathBuf, total_size: u64) -> Self {
         Self {
-            beatmapset_id,
+            id,
             handle: Arc::new(Mutex::new(None)),
             cancel_token: tokio_util::sync::CancellationToken::new(),
             state: Arc::new(RwLock::new(TaskState::default())),
@@ -103,5 +103,8 @@ impl DownloadTask {
             handle.abort();
         }
         self.transition_state(TaskState::Canceled).await
+    }
+    pub fn task_id(&self) -> u32 {
+        self.id
     }
 }

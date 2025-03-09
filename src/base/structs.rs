@@ -1,5 +1,7 @@
+use super::algorithms::parse_content_disposition;
+use super::enums::AuthMethod;
 use serde::{Deserialize, Serialize};
-
+use chrono::{DateTime, Utc};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadProgress {
     pub bytes_downloaded: u64,
@@ -35,6 +37,8 @@ pub struct DownloadOptions {
     pub save_path: String,
     /// 是否自动创建目录
     pub create_dirs: bool,
+    /// 文件名策略
+    pub path_policy: PathPolicy,
     
     // 网络配置
     /// 自定义HTTP头
@@ -81,6 +85,7 @@ impl Default for DownloadOptions {
         Self {
             save_path: "downloads".to_string(),
             create_dirs: true,
+            path_policy: PathPolicy::default(),
             headers: Vec::new(),
             user_agent: Some("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36".into()),
             timeout: 30,
@@ -141,4 +146,155 @@ impl DownloadOptions {
         self
     }
 
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DownloadMeta {
+    /// 从Content-Type头获取的MIME类型
+    pub content_type: Option<String>,
+    
+    /// 服务器返回的ETag（用于缓存验证）
+    pub etag: Option<String>,
+    
+    /// 最后修改时间（Last-Modified头）
+    pub last_modified: Option<String>,
+    
+    /// 通过Content-Length获取的预期大小
+    pub expected_size: Option<u64>,
+    
+    /// 从Content-Disposition解析的文件名
+    pub suggested_filename: Option<String>,
+    
+    /// 下载开始时间戳
+    pub download_start: Option<DateTime<Utc>>,
+    
+    /// 文件校验信息（可后续填充）
+    pub checksum: Option<FileChecksum>,
+}
+impl DownloadMeta {
+    /// 从HTTP响应头生成元数据
+    pub fn from_headers(headers: &reqwest::header::HeaderMap) -> Self {
+        let content_type = headers
+            .get("Content-Type")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        let etag = headers
+            .get("ETag")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        let last_modified = headers
+            .get("Last-Modified")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        let content_length = headers
+            .get("Content-Length")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse().ok());
+
+        let suggested_filename = headers
+            .get("Content-Disposition")
+            .and_then(|v| v.to_str().ok())
+            .and_then(parse_content_disposition);
+
+        Self {
+            content_type,
+            etag,
+            last_modified,
+            expected_size: content_length,
+            suggested_filename,
+            download_start: Some(Utc::now()),
+            checksum: None,
+        }
+    }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FileChecksum {
+    MD5(String),
+    SHA1(String),
+    SHA256(String),
+    Custom { algorithm: String, value: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DownloadResource {
+    Url(String),
+    Id(String), 
+    Params(Vec<String>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolvedResource {
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub auth: Option<AuthMethod>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PathPolicy {
+    /// 命名策略：auto | custom 
+    pub naming: String,
+    
+    /// 自定义命名模板（使用类似 mustache 的语法）
+    /// 可用变量：{url}, {domain}, {ext}, {filename}, {date}, {time}, {size}
+    pub template: Option<String>,
+    
+    /// 目录组织结构：flat | by_type | by_domain | custom
+    pub organization: String,
+    
+    /// 自定义目录结构模板
+    pub dir_template: Option<String>,
+    
+    /// 冲突解决策略：overwrite | rename | error
+    pub conflict: String,
+    
+    /// 自动清理非法字符
+    pub sanitize: bool,
+    
+    /// 最大文件名长度
+    pub max_length: Option<usize>,
+}
+
+impl Default for PathPolicy {
+    fn default() -> Self {
+        Self {
+            naming: "auto".to_string(),
+            template: None,
+            organization: "flat".to_string(),
+            dir_template: None,
+            conflict: "overwrite".to_string(),
+            sanitize: true,
+            max_length: None,
+        }
+    }
+}
+
+impl PathPolicy {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_naming(mut self, naming: impl Into<String>) -> Self {
+        self.naming = naming.into();
+        self
+    }
+
+    pub fn with_organization(mut self, organization: impl Into<String>) -> Self {
+        self.organization = organization.into();
+        self
+    }
+
+    pub fn with_conflict(mut self, conflict: impl Into<String>) -> Self {
+        self.conflict = conflict.into();
+        self
+    }
+
+    pub fn with_sanitize(mut self, sanitize: bool) -> Self {
+        self.sanitize = sanitize;
+        self
+    }
 }

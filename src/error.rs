@@ -51,6 +51,17 @@ impl From<reqwest::Error> for Error {
     }
 }
 
+impl From<handlebars::RenderError> for Error {
+    fn from(e: handlebars::RenderError) -> Self {
+        Error::new(ErrorKind::HandlebarsRenderError(e))
+    }
+}
+impl From<chrono::ParseError> for Error {
+    fn from(e: chrono::ParseError) -> Self {
+        Error::new(ErrorKind::ChronoParseError(e))
+    }
+}
+
 #[cfg(feature = "tui")]
 impl From<indicatif::style::TemplateError> for Error {
     fn from(e: indicatif::style::TemplateError) -> Self {
@@ -74,6 +85,8 @@ pub enum ErrorKind {
     ReqwestError(reqwest::Error),
     StdIoError(std::io::Error),
     SerdeJsonError(serde_json::Error),
+    HandlebarsRenderError(handlebars::RenderError),
+    ChronoParseError(chrono::ParseError),
     #[cfg(feature = "tui")]
     IndicatifTemplateError(indicatif::style::TemplateError),
 }
@@ -85,6 +98,8 @@ impl std::fmt::Debug for ErrorKind {
             ErrorKind::ReqwestError(e) => write!(f, "{}", e),
             ErrorKind::StdIoError(e) => write!(f, "{}", e),
             ErrorKind::SerdeJsonError(e) => write!(f, "{}", e),
+            ErrorKind::HandlebarsRenderError(e) => write!(f, "{}", e),
+            ErrorKind::ChronoParseError(e) => write!(f, "{}", e),
             #[cfg(feature = "tui")]
             ErrorKind::IndicatifTemplateError(e) => write!(f, "{}", e),
         }
@@ -98,6 +113,8 @@ impl std::fmt::Display for ErrorKind {
             ErrorKind::ReqwestError(e) => write!(f, "{}", e),
             ErrorKind::StdIoError(e) => write!(f, "{}", e),
             ErrorKind::SerdeJsonError(e) => write!(f, "{}", e),
+            ErrorKind::HandlebarsRenderError(e) => write!(f, "{}", e),
+            ErrorKind::ChronoParseError(e) => write!(f, "{}", e),
             #[cfg(feature = "tui")]
             ErrorKind::IndicatifTemplateError(e) => write!(f, "{}", e),
         }

@@ -1,10 +1,11 @@
 use crate::task::{ DownloadTask, PersistentState, TaskStateRecord };
-use crate::base::traits::CombinedReporter;
+use crate::base::traits::{CombinedReporter, ResourceResolver};
 use crate::base::algorithms::rate_remaining_progress;
-use crate::base::enums::{DownloaderState, TaskState,FinishType};
-use crate::base::structs::{DownloadProgress, DownloadOptions };
+use crate::base::enums::{DownloadResult, DownloaderState, OperationType, TaskState};
+use crate::base::structs::{DownloadResource,DownloadProgress, DownloadOptions ,ResolvedResource,DownloadMeta};
 use crate::error::Result;
-
+use crate::base::algorithms::{generate_task_id,auto_filename, custom_filename,  organize_by_domain, organize_by_type, custom_directory};
+use crate::template::{TemplateRenderer, TemplateContext};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::io::AsyncWriteExt;
@@ -12,17 +13,18 @@ use futures::stream::StreamExt;
 use std::path::PathBuf;
 
 #[derive(Clone)]
-pub struct BeatmapDownloader {
+pub struct Downloader {
     client: reqwest::Client,
     options: Arc<RwLock<DownloadOptions>>,
     state: Arc<RwLock<DownloaderState>>, 
     tasks: Arc<RwLock<Vec<DownloadTask>>>, 
+    resolver: Arc<Box<dyn ResourceResolver>>,
     reporter: Arc<Box<dyn CombinedReporter>>, 
     state_notifier: tokio::sync::broadcast::Sender<DownloaderState>,
 }
 
-impl BeatmapDownloader {
-    pub fn new(options: DownloadOptions,reporter:Box<dyn CombinedReporter>) -> Self {
+impl Downloader {
+    pub fn new(options: DownloadOptions,resolver: Box<dyn ResourceResolver>,reporter:Box<dyn CombinedReporter>) -> Self {
         let client = reqwest::ClientBuilder
             ::new()
             .user_agent("osynicite")
@@ -34,6 +36,7 @@ impl BeatmapDownloader {
             options: Arc::new(RwLock::new(options)),
             state: Arc::new(RwLock::new(DownloaderState::default())),
             tasks: Arc::new(RwLock::new(Vec::new())),
+            resolver: Arc::new(resolver),
             reporter: Arc::new(reporter),
             state_notifier: tokio::sync::broadcast::channel(128).0,
         }
@@ -73,52 +76,56 @@ impl BeatmapDownloader {
     pub async fn get_tasks(&self) -> Vec<DownloadTask> {
         self.tasks.read().await.clone()
     }
-    pub async fn start(&self, beatmapset_ids: Vec<u32>,urls: Vec<String>) -> Result<()> {
+    pub async fn start(&self, 
+        // task_ids: Vec<u32>,urls: Vec<String>
+        resources: Vec<DownloadResource>
+    ) -> Result<()> {
 
-        let options = self.get_options().await;
-        let save_path = &options.save_path;
-        let state_path = PathBuf::from(save_path).join("downloading.json");
-        let new_ids: Vec<u32>;
+        // 这个解决重复下载...，必须要能够有id或者url解析之后的对应，否则就只能用url了
+        // task记录url，然后这里解析和去准备一下，除掉对应url的resource
 
-        if state_path.exists() {
-            let contents = tokio::fs::read_to_string(&state_path).await?;
-            let state: PersistentState = serde_json::from_str(&contents)?;
-            self.load_state(state).await?;
-            new_ids = futures::future
-                ::join_all(
-                    beatmapset_ids.into_iter().map(async |id: u32| {
-                        let tasks = self.tasks.read().await;
-                        let task = tasks.iter().find(|t| t.beatmapset_id == id);
-                        match task {
-                            Some(t) => {
-                                let state = t.state.read().await;
-                                if *state != TaskState::Completed || *state != TaskState::Canceled {
-                                    Some(id)
-                                } else {
-                                    None
-                                }
-                            }
-                            None => Some(id),
-                        }
-                    })
-                ).await
-                .into_iter()
-                .filter_map(|id| id)
-                .collect();
-        } else {
-            new_ids = beatmapset_ids;
-        }
+        // let options = self.get_options().await;
+        // let save_path = &options.save_path;
+        // let state_path = PathBuf::from(save_path).join("downloading.json");
+        // let new_ids: Vec<u32>;
+        // if state_path.exists() {
+        //     let contents = tokio::fs::read_to_string(&state_path).await?;
+        //     let state: PersistentState = serde_json::from_str(&contents)?;
+        //     self.load_state(state).await?;
+        //     new_ids = futures::future
+        //         ::join_all(
+        //             task_ids.into_iter().map(async |id: u32| {
+        //                 let tasks = self.tasks.read().await;
+        //                 let task = tasks.iter().find(|t| t.id == id);
+        //                 match task {
+        //                     Some(t) => {
+        //                         let state = t.state.read().await;
+        //                         if *state != TaskState::Completed || *state != TaskState::Canceled {
+        //                             Some(id)
+        //                         } else {
+        //                             None
+        //                         }
+        //                     }
+        //                     None => Some(id),
+        //                 }
+        //             })
+        //         ).await
+        //         .into_iter()
+        //         .filter_map(|id| id)
+        //         .collect();
+        // } else {
+        //     new_ids = task_ids;
+        // }
 
         self.transition_state(DownloaderState::Running).await?;
 
-        let options = self.get_options().await;
         let downloader = self.clone();
-        println!("Downloading {} beatmapsets", new_ids.len());
+        println!("Downloading {} resources", resources.len());
 
         let reporter = self.reporter.clone();
         tokio::spawn(async move {
-            if let Err(e) = downloader.download_multi(new_ids,urls, options.concurrency as usize).await {
-                reporter.operation_result(0, false, format!("Download failed: {}", e)).await.ok();
+            if let Err(e) = downloader.download_multi(resources).await {
+                reporter.operation_result(OperationType::Download, 500, format!("Download failed: {}", e)).await.ok();
                 eprintln!("Download failed: {}", e);
             }
         });
@@ -134,38 +141,145 @@ impl BeatmapDownloader {
     pub async fn stop(&self) -> Result<()> {
         self.transition_state(DownloaderState::Stopped).await
     }
+
+    async fn generate_path(
+        &self,
+        resource: &DownloadResource,
+        resolved: &ResolvedResource,
+        meta: &DownloadMeta
+    ) -> Result<PathBuf> {
+        let options = self.get_options().await;
+        // 获取基础保存目录
+        let base_dir = PathBuf::from(&options.save_path);
+        
+        let template = options.path_policy.template.as_deref().unwrap_or("");
+        let dir_template = options.path_policy.dir_template.as_deref().unwrap_or("");
+        let max_length = options.path_policy.max_length.unwrap_or(255);
+
+        // 步骤1：确定文件名
+        let filename = match options.path_policy.naming.as_str() {
+            "auto" => auto_filename(resolved, meta).await?,
+            "custom" => custom_filename(resource, resolved, &TemplateRenderer::new(),meta,template, max_length).await?,
+            _ => return Err("Invalid naming policy".into()),
+        };
+        
+        // 步骤2：确定目录结构
+        let subdir = match options.path_policy.organization.as_str() {
+            "flat" => PathBuf::new(),
+            "by_type" => organize_by_type(meta).await?,
+            "by_domain" => organize_by_domain(resolved).await?,
+            "custom" => {
+                let path_buf = PathBuf::from(&filename);
+                let extension = path_buf.extension().map(|e| e.to_str().unwrap_or_default());
+                    
+                let context = TemplateContext {
+                    url: &resolved.url,
+                    domain: None,
+                    filename: &filename,
+                    extension,
+                    meta,
+                    download_time: chrono::Utc::now(),
+                    custom_data: None,
+                };    
+                custom_directory(dir_template, &context, &TemplateRenderer::new()).await?
+            },
+            _ => return Err("Invalid organization policy".into()),
+        };
+        
+        // 步骤3：构建完整路径
+        let mut full_path = base_dir.join(subdir).join(filename);
+        
+        // 步骤4：处理路径冲突
+        full_path = self.handle_conflict(full_path).await?;
+        
+        Ok(full_path)
+    }
+
+
+
+    async fn handle_conflict(&self, mut path: PathBuf) -> Result<PathBuf> {
+        let mut counter = 1;
+        let original_path = path.clone();
+        let options = self.get_options().await;
+        
+        while path.exists() {
+            match options.path_policy.conflict.as_str() {
+                "overwrite" => break,
+                "rename" => {
+                    let stem = original_path.file_stem().unwrap_or_default().to_str().unwrap_or_default();
+                    let ext = original_path.extension()
+                        .map(|e| format!(".{}", e.to_str().unwrap_or_default()))
+                        .unwrap_or_default();
+                    
+                    path.set_file_name(format!("{}_{}{}", stem, counter, ext));
+                    counter += 1;
+                }
+                "error" => return Err("File already exists".into()),
+                _ => return Err("Invalid conflict policy".into()),
+            }
+        }
+        Ok(path)
+    }
     pub async fn download_multi(
         &self,
-        beatmapset_ids: Vec<u32>,
-        urls: Vec<String>,
-        concurrency_limit: usize
+        resources: Vec<DownloadResource>,
+        // task_ids: Vec<u32>,
+        // urls: Vec<String>,
+        // concurrency_limit: usize
     ) -> Result<()> {
         let options = self.get_options().await;
         if options.create_dirs {
             tokio::fs::create_dir_all(&options.save_path).await?;
         }
+        let concurrency_limit = options.concurrency as usize;
+        let base_path = PathBuf::from(&options.save_path);
 
-        let default_url = String::new();
+        let tasks = resources.into_iter().map(async |resource|  {
+            // let resolved = self.resolver.resolve(&resource).await?;
+            // let file_path = self.generate_path(&resource, &resolved).await?;
+            
+            // let task = DownloadTask::new(
+            //     resource,
+            //     file_path,
+            //     DownloadMeta {
+            //         content_type: resolved.content_type,
+            //         // ...其他元数据
+            //     }
+            // );
+            
+            // self.tasks.write().await.insert(task.task_id(), task.clone());
+            // let resolved = self.resolver.resolve(&resource).await?;
+            // self.download_task(resource, &base_path).await
+            match self.download_task(resource,&base_path).await {
+                Ok(_) => {
+                }
+                Err(e) => {
+                    eprintln!("Failed to download resource: {}", e);
+                }
+            }
+        });
+
         let downloads = futures::stream
             ::iter(
-                beatmapset_ids.into_iter().map(async |beatmapset_id| {
-                    let file_path = PathBuf::from(&options.save_path).join(
-                        format!("{}.osz", beatmapset_id)
-                    );
+                tasks
+                // task_ids.into_iter().map(async |task_id| {
+                //     let file_path = PathBuf::from(&options.save_path).join(
+                //         format!("{}.osz", task_id)
+                //     );
 
-                    let url = urls.get(beatmapset_id as usize).unwrap_or(&default_url);
+                //     let url = urls.get(task_id as usize).unwrap_or(&default_url);
 
-                    match self.download_task(url,beatmapset_id,  &file_path).await {
-                        Ok(_) => {
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to download beatmapset {}: {}", beatmapset_id, e);
-                        }
-                    }
-                })
+                //     match self.download_task(url,task_id,  &file_path).await {
+                //         Ok(_) => {
+                //         }
+                //         Err(e) => {
+                //             eprintln!("Failed to download beatmapset {}: {}", task_id, e);
+                //         }
+                //     }
+                // })
             )
             .buffer_unordered(concurrency_limit)
-            .collect::<Vec<()>>();
+            .collect::<Vec<_>>();
 
         downloads.await;
 
@@ -178,19 +292,23 @@ impl BeatmapDownloader {
 
     async fn download_task(
         &self,
-        url: &str,
-        beatmapset_id: u32,
-        file_path: &PathBuf
+        // url: &str,
+        // task_id: u32,
+        resource: DownloadResource,
+        base_path: &PathBuf
     ) -> Result<()> {
         let save_interval = tokio::time::Duration::from_secs(1);
         let mut last_save = tokio::time::Instant::now();
         let mut current_len = 0;
-        if file_path.exists() {
-            let metadata = tokio::fs::metadata(&file_path).await?;
+        if base_path.exists() {
+            // 这里要调
+            let metadata = tokio::fs::metadata(&base_path).await?;
             current_len = metadata.len();
         }
 
-        let mut request = self.client.get(url);
+        let resolved = self.resolver.resolve(&resource).await?;
+
+        let mut request = self.client.get(resolved.url.as_str());
         if current_len > 0 {
             request = request.header("Range", format!("bytes={}-", current_len));
         }
@@ -205,21 +323,41 @@ impl BeatmapDownloader {
             );
         }
 
+        let meta = DownloadMeta::from_headers(response.headers());
+
+        let file_path = self.generate_path(&resource, &resolved,&meta).await?;
+
         let total_size = response.content_length().unwrap_or(0) + current_len;
 
-        let task = DownloadTask::new(beatmapset_id, file_path.clone(), total_size);
+        let task_id :u32;
+        match resource {
+            DownloadResource::Url(url) => {
+                // 根据字符串生成随机3232
+                task_id = generate_task_id(&url);
+            }
+            DownloadResource::Id(id) => {
+                // 尝试解析为u32，否则根据字符串生成随机u32
+                task_id = id.parse().unwrap_or_else(|_| generate_task_id(&id));
+            }
+            DownloadResource::Params(params) => {
+                // 根据拼接后的字符串生成随机3232
+                task_id = generate_task_id(&params.join(""));
+            }
+        }
+
+        let task = DownloadTask::new(task_id, file_path.clone(), total_size);
 
         {
             self.tasks.write().await.push(task.clone());
         }
 
-        self.reporter.start_task(beatmapset_id, total_size).await?;
+        self.reporter.start_task(task_id, total_size).await?;
 
         let mut file = tokio::fs::OpenOptions
             ::new()
             .create(true)
             .append(true)
-            .open(&file_path).await?;
+            .open(&base_path).await?;
 
         let mut downloaded = current_len;
         let mut stream = response.bytes_stream();
@@ -281,7 +419,7 @@ impl BeatmapDownloader {
                 }
                 DownloaderState::Stopped => {
                     task.cancel().await?;
-                    self.reporter.finish_task(beatmapset_id,FinishType::Canceled).await?;
+                    self.reporter.finish_task(task_id,DownloadResult::Canceled).await?;
                     self.save_state().await?;
                     return Ok(());
                     
@@ -333,7 +471,7 @@ impl BeatmapDownloader {
                     }
                 }
                 TaskState::Canceled => {
-                    self.reporter.finish_task(beatmapset_id,FinishType::Canceled).await?;
+                    self.reporter.finish_task(task_id,DownloadResult::Canceled).await?;
                     drop(task_state);
                     self.save_state().await?;
                     return Ok(());
@@ -353,7 +491,7 @@ impl BeatmapDownloader {
                 *task.progress.lock().await = progress.clone();
             }
 
-            self.reporter.update_progress(beatmapset_id, &progress).await?;
+            self.reporter.update_progress(task_id, &progress).await?;
 
             if last_save.elapsed() >= save_interval {
                 self.save_state().await?;
@@ -365,13 +503,20 @@ impl BeatmapDownloader {
 
 
 
-        let metadata = tokio::fs::metadata(&file_path).await?;
+        let metadata = tokio::fs::metadata(&base_path).await?;
         if metadata.len() == total_size {
             task.transition_state(TaskState::Completed).await?;
-            self.reporter.finish_task(beatmapset_id, FinishType::Success).await?;
+            self.reporter.finish_task(task_id, DownloadResult::Success {
+                path: base_path.clone(),
+                size: total_size,
+                duration: start_time.elapsed(),
+            }).await?;
         } else {
             task.transition_state(TaskState::Failed).await?;
-            self.reporter.finish_task(beatmapset_id, FinishType::Failed).await?;
+            self.reporter.finish_task(task_id, DownloadResult::Failed{
+                error: "Downloaded size does not match expected size".to_string(),
+                retryable: true,
+            }).await?;
         }
 
         self.save_state().await?;
@@ -379,33 +524,33 @@ impl BeatmapDownloader {
         Ok(())
     }
 
-    pub async fn pause_task(&self, beatmapset_id: u32) -> Result<()> {
+    pub async fn pause_task(&self, task_id: u32) -> Result<()> {
         let tasks = self.tasks.write().await;
-        if let Some(task) = tasks.iter().find(|t| t.beatmapset_id == beatmapset_id) {
+        if let Some(task) = tasks.iter().find(|t| t.id == task_id) {
             task.pause().await?;
             Ok(())
         } else {
-            Err(format!("Task {} not found", beatmapset_id).into())
+            Err(format!("Task {} not found", task_id).into())
         }
     }
 
-    pub async fn resume_task(&self, beatmapset_id: u32) -> Result<()> {
+    pub async fn resume_task(&self, task_id: u32) -> Result<()> {
         let tasks = self.tasks.write().await;
-        if let Some(task) = tasks.iter().find(|t| t.beatmapset_id == beatmapset_id) {
+        if let Some(task) = tasks.iter().find(|t| t.id == task_id) {
             task.resume().await?;
             Ok(())
         } else {
-            Err(format!("Task {} not found", beatmapset_id).into())
+            Err(format!("Task {} not found", task_id).into())
         }
     }
 
-    pub async fn cancel_task(&self, beatmapset_id: u32) -> Result<()> {
+    pub async fn cancel_task(&self, task_id: u32) -> Result<()> {
         let tasks = self.tasks.write().await;
-        if let Some(task) = tasks.iter().find(|t| t.beatmapset_id == beatmapset_id) {
+        if let Some(task) = tasks.iter().find(|t| t.id == task_id) {
             task.cancel().await?;
             Ok(())
         } else {
-            Err(format!("Task {} not found", beatmapset_id).into())
+            Err(format!("Task {} not found", task_id).into())
         }
     }
 
@@ -415,7 +560,7 @@ impl BeatmapDownloader {
         for task in tasks.iter() {
             let progress = task.progress.lock().await;
             let task_state = TaskStateRecord {
-                beatmapset_id: task.beatmapset_id,
+                id: task.id,
                 downloaded_bytes: progress.bytes_downloaded,
                 total_bytes: progress.total_bytes,
                 file_path: task.file_path.clone(),
@@ -442,7 +587,7 @@ impl BeatmapDownloader {
         let mut tasks = self.tasks.write().await;
         for task_state in state.tasks {
             let task = DownloadTask::new(
-                task_state.beatmapset_id,
+                task_state.id,
                 task_state.file_path,
                 task_state.total_bytes
             );
@@ -470,7 +615,7 @@ impl BeatmapDownloader {
             let mut tasks = self.tasks.write().await;
             for task_state in state.tasks {
                 let task = DownloadTask::new(
-                    task_state.beatmapset_id,
+                    task_state.id,
                     task_state.file_path,
                     task_state.total_bytes
                 );
@@ -513,73 +658,76 @@ impl BeatmapDownloader {
 
 
 // Convenience function for multi-download
-pub async fn download_beatmaps(
-    beatmapset_ids: Vec<u32>,
-    concurrency_limit: usize,
-    options: DownloadOptions,
-    reporter:Box<dyn CombinedReporter>
-) -> Result<()> {
-    let downloader = BeatmapDownloader::new(options,reporter);
-    downloader.download_multi(beatmapset_ids,vec![], concurrency_limit).await
-}
+// pub async fn download_beatmaps(
+//     task_ids: Vec<u32>,
+//     concurrency_limit: usize,
+//     options: DownloadOptions,
+//     resolver:Box<dyn ResourceResolver>,
+//     reporter:Box<dyn CombinedReporter>
+
+// ) -> Result<()> {
+//     let downloader = Downloader::new(options,resolver,reporter);
+//     downloader.download_multi(task_ids,vec![], concurrency_limit).await
+// }
 
 // Quick multi-download with default settings
-pub async fn quick_download_multi(
-    beatmapset_ids: Vec<u32>,
-    concurrency_limit: usize,
-    reporter:Box<dyn CombinedReporter>
-) -> Result<()> {
+// pub async fn quick_download_multi(
+//     task_ids: Vec<u32>,
+//     concurrency_limit: usize,
+//     resolver:Box<dyn ResourceResolver>,
+//     reporter:Box<dyn CombinedReporter>
+// ) -> Result<()> {
 
-    let config = DownloadOptions::default()
-        .with_save_path("fetch".to_string());
+//     let config = DownloadOptions::default()
+//         .with_save_path("fetch".to_string());
 
-    download_beatmaps(beatmapset_ids, concurrency_limit, config,reporter).await
-}
+//     download_beatmaps(task_ids, concurrency_limit, config,resolver,reporter).await
+// }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tokio::sync::Mutex;
-    use crate::reporters::tui::TuiReporter;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use tokio::sync::Mutex;
+//     use crate::reporters::tui::TuiReporter;
 
-    #[tokio::test]
-    async fn test_download_single_no_osu_login() {
-        let options = DownloadOptions::default()
-            .with_save_path("fetch".to_string());
+//     #[tokio::test]
+//     async fn test_download_single_no_osu_login() {
+//         let options = DownloadOptions::default()
+//             .with_save_path("fetch".to_string());
 
-        let downloader = BeatmapDownloader::new(options,Box::new(TuiReporter::new()));
-        downloader.download_task("",4587512,&PathBuf::new()).await.unwrap();
-    }
+//         let downloader = Downloader::new(options,Box::new(TuiReporter::new()));
+//         downloader.download_task("",4587512,&PathBuf::new()).await.unwrap();
+//     }
 
-    #[tokio::test]
-    async fn test_download_multi() {
-        let options = DownloadOptions::default()
-            .with_save_path("fetch".to_string());
+//     #[tokio::test]
+//     async fn test_download_multi() {
+//         let options = DownloadOptions::default()
+//             .with_save_path("fetch".to_string());
 
-        let downloader = BeatmapDownloader::new(options,Box::new(TuiReporter::new()));
-        downloader.start(vec![1234567, 114514, 1919810],vec![]).await.unwrap();
-    }
-    #[tokio::test]
-    async fn test_download_control() {
-        let options = DownloadOptions::default()
-            .with_save_path("fetch".to_string())
-            .with_concurrency(2);
+//         let downloader = Downloader::new(options,Box::new(TuiReporter::new()));
+//         downloader.start(vec![1234567, 114514, 1919810],vec![]).await.unwrap();
+//     }
+//     #[tokio::test]
+//     async fn test_download_control() {
+//         let options = DownloadOptions::default()
+//             .with_save_path("fetch".to_string())
+//             .with_concurrency(2);
 
-        let downloader = Arc::new(Mutex::new(BeatmapDownloader::new(options,Box::new(TuiReporter::new()))));
+//         let downloader = Arc::new(Mutex::new(Downloader::new(options,Box::new(TuiReporter::new()))));
 
-        // 控制下载启停，断点续联
-        let downloader_clone = Arc::clone(&downloader);
-        tokio::spawn(async move {
-            downloader_clone.lock().await.start(vec![1234567, 114514, 1919810],vec![]).await.unwrap();
-        });
+//         // 控制下载启停，断点续联
+//         let downloader_clone = Arc::clone(&downloader);
+//         tokio::spawn(async move {
+//             downloader_clone.lock().await.start(vec![1234567, 114514, 1919810],vec![]).await.unwrap();
+//         });
 
-        // 但是他是直接顺序执行了，没有暂停下载，哦哦，可能是单点暂停还没写，但是之前设置了单线程
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+//         // 但是他是直接顺序执行了，没有暂停下载，哦哦，可能是单点暂停还没写，但是之前设置了单线程
+//         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-        downloader.lock().await.pause().await.unwrap();
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-        downloader.lock().await.resume().await.unwrap();
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-        downloader.lock().await.stop().await.unwrap();
-    }
-}
+//         downloader.lock().await.pause().await.unwrap();
+//         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+//         downloader.lock().await.resume().await.unwrap();
+//         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+//         downloader.lock().await.stop().await.unwrap();
+//     }
+// }
