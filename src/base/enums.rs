@@ -1,4 +1,4 @@
-use super::structs::ResolvedResource;
+use super::structs::{ResolvedResource, DownloadProgress};
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
@@ -21,13 +21,15 @@ pub enum TaskState {
     Failed,      
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum FinishType {
-    Success,
-    Failed,
-    Canceled,
+#[derive(Clone)]
+pub enum ProgressEvent { 
+    Start { task_id: u32, total: u64 },
+    Update { task_id: u32, progress: DownloadProgress },
+    Finish { task_id: u32 ,finish: DownloadResult},
+    OperationResult {
+        operation: OperationType, code: u32, message: String
+    },
 }
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DownloadResult {
     Success {

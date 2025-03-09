@@ -62,6 +62,18 @@ impl From<chrono::ParseError> for Error {
     }
 }
 
+impl From<tokio::sync::mpsc::error::SendError<crate::base::enums::ProgressEvent>> for Error {
+    fn from(e: tokio::sync::mpsc::error::SendError<crate::base::enums::ProgressEvent>) -> Self {
+        Error::new(ErrorKind::TokioMpscSendError(e))
+    }
+}
+
+impl From<tokio::sync::broadcast::error::SendError<crate::base::enums::ProgressEvent>> for Error {
+    fn from(e: tokio::sync::broadcast::error::SendError<crate::base::enums::ProgressEvent>) -> Self {
+        Error::new(ErrorKind::TokioBroadcastSendError(e))
+    }
+}
+
 #[cfg(feature = "tui")]
 impl From<indicatif::style::TemplateError> for Error {
     fn from(e: indicatif::style::TemplateError) -> Self {
@@ -87,6 +99,8 @@ pub enum ErrorKind {
     SerdeJsonError(serde_json::Error),
     HandlebarsRenderError(handlebars::RenderError),
     ChronoParseError(chrono::ParseError),
+    TokioMpscSendError(tokio::sync::mpsc::error::SendError<crate::base::enums::ProgressEvent>),
+    TokioBroadcastSendError(tokio::sync::broadcast::error::SendError<crate::base::enums::ProgressEvent>),
     #[cfg(feature = "tui")]
     IndicatifTemplateError(indicatif::style::TemplateError),
 }
@@ -100,6 +114,9 @@ impl std::fmt::Debug for ErrorKind {
             ErrorKind::SerdeJsonError(e) => write!(f, "{}", e),
             ErrorKind::HandlebarsRenderError(e) => write!(f, "{}", e),
             ErrorKind::ChronoParseError(e) => write!(f, "{}", e),
+            ErrorKind::TokioMpscSendError(e) => write!(f, "TokioMpscSendError: {}", e),
+            ErrorKind::TokioBroadcastSendError(e) => write!(f, "TokioBroadcastSendError: {}", e),
+            
             #[cfg(feature = "tui")]
             ErrorKind::IndicatifTemplateError(e) => write!(f, "{}", e),
         }
@@ -115,6 +132,8 @@ impl std::fmt::Display for ErrorKind {
             ErrorKind::SerdeJsonError(e) => write!(f, "{}", e),
             ErrorKind::HandlebarsRenderError(e) => write!(f, "{}", e),
             ErrorKind::ChronoParseError(e) => write!(f, "{}", e),
+            ErrorKind::TokioMpscSendError(e) => write!(f, "TokioMpscSendError: {}", e),
+            ErrorKind::TokioBroadcastSendError(e) => write!(f, "TokioBroadcastSendError: {}", e),
             #[cfg(feature = "tui")]
             ErrorKind::IndicatifTemplateError(e) => write!(f, "{}", e),
         }
