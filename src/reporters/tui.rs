@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-const MAX_CONCURRENT_BARS: usize = 4;
+const MAX_CONCURRENT_BARS: usize = 10 ;
 
 // TUI 实现
 #[cfg(feature = "tui")]
@@ -39,7 +39,6 @@ impl TuiReporter {
     // 私有方法用于获取或创建进度条
     async fn get_or_create_bar(&self, task_id: u32, total: u64) -> ProgressBar {
         let mut bars = self.bars.lock().await;
-        // 但是有时候就只有两个进度条
         
         if bars.len() >= MAX_CONCURRENT_BARS {
             bars.retain(|_, bar| !bar.is_finished());
@@ -54,12 +53,12 @@ impl TuiReporter {
                     "{{spinner:.green}} [{{bar:.cyan/blue}}] {{bytes}}/{{total_bytes}} ({}) {{msg}}",
                     task_id
                 ))
-                .unwrap() //迫不得已
+                .unwrap_or(ProgressStyle::default_bar())
                 .progress_chars("#>-"));
                 bar
             });
         
-        bars.get(&task_id).unwrap().clone()
+        bars.get(&task_id).unwrap_or(&ProgressBar::hidden()).clone()
     }
 }
 
@@ -103,21 +102,23 @@ impl ProgressReporter for TuiReporter {
         let mut bars = self.bars.lock().await;
         if let Some(bar) = bars.remove(&task_id) {
             match result {
-                DownloadResult::Success { .. } => {
+                DownloadResult::Success { path ,duration ,.. } => {
                     // 条的颜色变成绿色，还是#>-
                     bar.set_style(ProgressStyle::with_template(&format!(
                         "{{spinner:.green}} [{{bar:.green/blue}}] {{bytes}}/{{total_bytes}} ({}): {{msg}}",
                         task_id
                     ))?.progress_chars("#>-"));
-                    bar.finish_with_message("✅ Done")
+                    let success_message = format!("✅ Done in {}s, saved to {}",duration.as_secs(),path.display());
+                    bar.finish_with_message(success_message)
                 },
-                DownloadResult::Failed { .. } => {
+                DownloadResult::Failed { error,.. } => {
                     // 条变成红色
                     bar.set_style(ProgressStyle::default_bar().template(&format!(
                         "{{spinner:.red}} [{{bar:.red/blue}}] {{bytes}}/{{total_bytes}} ({}): {{msg}}",
                         task_id
                     ))?.progress_chars("#>-"));
-                    bar.set_message("❌ Failed")
+                    let error_message = format!("❌ Error: {}", error);
+                    bar.abandon_with_message(error_message)
                 },
                 DownloadResult::Canceled => {
                     // 条变成黄色

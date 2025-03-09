@@ -92,7 +92,8 @@ impl Downloader {
     }
     pub async fn get_downloading_tasks(&self) -> Vec<DownloadTask> {
         let tasks = self.tasks.read().await;
-        futures::stream::iter(tasks.iter())
+        futures::stream
+            ::iter(tasks.iter())
             .filter_map(|t| async move {
                 let state = t.state.read().await;
                 if *state == TaskState::Downloading {
@@ -101,8 +102,7 @@ impl Downloader {
                     None
                 }
             })
-            .collect::<Vec<_>>()
-            .await
+            .collect::<Vec<_>>().await
     }
     //
     pub async fn optimize_resources(
@@ -139,7 +139,6 @@ impl Downloader {
         optimized
     }
     pub async fn start(&self, resources: Vec<DownloadResource>) -> Result<()> {
-        
         let options = self.get_options().await;
         let save_path = &options.save_path;
         let state_path = PathBuf::from(save_path).join("downloading.json");
@@ -169,6 +168,7 @@ impl Downloader {
                     .ok();
             }
         });
+
         Ok(())
     }
 
@@ -289,15 +289,17 @@ impl Downloader {
             tokio::fs::create_dir_all(&options.save_path).await?;
         }
         let concurrency_limit = options.concurrency as usize;
-        let base_path = PathBuf::from(&options.save_path);
 
         let tasks = resources.into_iter().map(async |resource| {
-            match self.download_task(resource, &base_path).await {
+            match self.download_task(resource).await {
                 Ok(_) => {}
                 Err(e) => {
                     self.reporter
-                        .operation_result(OperationType::Download, 500, format!("Failed to download resource: {}", e))
-                        .await
+                        .operation_result(
+                            OperationType::Download,
+                            500,
+                            format!("Failed to download resource: {}", e)
+                        ).await
                         .ok();
                 }
             }
@@ -306,30 +308,60 @@ impl Downloader {
         let downloads = futures::stream
             ::iter(tasks)
             .buffer_unordered(concurrency_limit)
-            .collect::<Vec<_>>();
+            .collect::<Vec<()>>();
 
         downloads.await;
 
-        // tokio::fs::remove_file(PathBuf::from(&options.save_path).join("downloading.json")).await?;
+        tokio::fs::remove_file(PathBuf::from(&options.save_path).join("downloading.json")).await?;
 
         Ok(())
     }
 
-    async fn download_task(
-        &self,
-        resource: DownloadResource,
-        base_path: &PathBuf
-    ) -> Result<()> {
+    async fn download_task(&self, resource: DownloadResource) -> Result<()> {
         let save_interval = tokio::time::Duration::from_secs(1);
         let mut last_save = tokio::time::Instant::now();
+
+        let resolved = self.resolver.resolve(&resource).await?;
+
+        let pre_request = self.client.get(resolved.url.as_str());
+        let pre_response = pre_request.send().await?;
+        if
+            !pre_response.status().is_success() &&
+            pre_response.status() != reqwest::StatusCode::PARTIAL_CONTENT
+        {
+            return Err(format!("HTTP error: {}", pre_response.status()).into());
+        }
+        // 为了获知路径来取得下载进度，必须先获取meta
+        // 如果不依赖路径，就需要外部的downloading，获取到url对应的downloaded_bytes，来直接发送，但是，downloading不保证绝对正确，因为并非立即存储
+        // 如果遇到中断，downloading是很不可靠的
+        // 但是我现在3线程以上就会遇到，下载一秒后全部卡住，然后下载失败
+        // Download: Failed to download resource: error decoding response body
+        // Download: Failed to download resource: error decoding response body
+        // Download: Failed to download resource: error decoding response body
+        // Download: Failed to download resource: error decoding response body
+        // 问题原因是error decoding response body
+        let meta = DownloadMeta::from_headers(pre_response.headers());
+        drop(pre_response);
+        // println!("Meta {:?}", meta);
+
+        let file_path = self.generate_path(&resource, &resolved, &meta).await?;
+        
+        let total_size = meta.expected_size.unwrap_or(0);
         let mut current_len = 0;
-        if base_path.exists() {
-            // 这里要调
-            let metadata = tokio::fs::metadata(&base_path).await?;
+        if file_path.exists() {
+            let metadata = tokio::fs::metadata(&file_path).await?;
             current_len = metadata.len();
         }
 
-        let resolved = self.resolver.resolve(&resource).await?;
+        if current_len == total_size {
+            self.reporter.start_task(generate_task_id(&resolved.url), total_size).await?;
+            self.reporter.finish_task(generate_task_id(&resolved.url), DownloadResult::Success {
+                path: file_path.clone(),
+                size: total_size,
+                duration: tokio::time::Duration::from_secs(0),
+            }).await?;
+            return Ok(());
+        }
 
         let mut request = self.client.get(resolved.url.as_str());
         if current_len > 0 {
@@ -344,15 +376,9 @@ impl Downloader {
             return Err(format!("HTTP error: {}", response.status()).into());
         }
 
-        let meta = DownloadMeta::from_headers(response.headers());
-
-        // println!("Meta {:?}", meta);
-
-        let file_path = self.generate_path(&resource, &resolved, &meta).await?;
-
         // println!("Downloading {} to {:?}", resolved.url, file_path);
 
-        let total_size = response.content_length().unwrap_or(0) + current_len;
+        // let total_size = response.content_length().unwrap_or(0) + current_len;
 
         let task_id: u32;
         match resource {
@@ -420,7 +446,6 @@ impl Downloader {
                                 match state_result {
                                     Ok(Ok(new_state)) => {
                                         if new_state != DownloaderState::Suspended {
-                                            println!("OK in global resume rx {:?}", new_state);
                                             break;
                                         }
                                     }
@@ -475,7 +500,6 @@ impl Downloader {
                                 match state_result {
                                     Ok(Ok(new_state)) => {
                                         if new_state != DownloaderState::Suspended {
-                                            println!("OK in task resume rx {:?}", new_state);
                                             break;
                                         }
                                     }
@@ -531,8 +555,11 @@ impl Downloader {
             file.write_all(&chunk).await?;
         }
 
-        let metadata = tokio::fs::metadata(&file_path).await?;
-        if metadata.len() == total_size {
+        file.sync_all().await?;
+        drop(file);
+
+        let final_size = tokio::fs::metadata(&file_path).await?;
+        if final_size.len() == total_size {
             task.transition_state(TaskState::Completed).await?;
             self.reporter.finish_task(task_id, DownloadResult::Success {
                 path: file_path.clone(),
@@ -540,9 +567,12 @@ impl Downloader {
                 duration: start_time.elapsed(),
             }).await?;
         } else {
+            // downloaded.len() != total_size，说明下载的文件大小不对
+            // 此时应该删除文件，标记任务为失败
+            tokio::fs::remove_file(&file_path).await?;
             task.transition_state(TaskState::Failed).await?;
             self.reporter.finish_task(task_id, DownloadResult::Failed {
-                error: format!("Downloaded size mismatch: {} != {}", metadata.len(), total_size),
+                error: format!("Downloaded size mismatch: {} != {}", final_size.len(), total_size),
                 retryable: true,
             }).await?;
         }
@@ -730,7 +760,7 @@ mod tests {
             Box::new(UrlResolver::new()),
             Box::new(TuiReporter::new())
         );
-        downloader.download_task(resources[0].clone(), &PathBuf::from("fetch")).await.unwrap();
+        downloader.download_task(resources[0].clone()).await.unwrap();
     }
 
     #[tokio::test]

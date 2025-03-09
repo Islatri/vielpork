@@ -129,7 +129,6 @@ pub async fn auto_filename(resolved: &ResolvedResource, meta: &DownloadMeta) -> 
             .map(|(_, v)| v)
     {
         if let Some(filename) = parse_content_disposition(disposition) {
-            println!("Content-Disposition: {}", filename);
             return Ok(filename);
         }
     }
