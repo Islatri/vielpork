@@ -340,14 +340,21 @@ impl Downloader {
                 task_id = hashmap.get("id").unwrap_or(&"".to_string()).parse().unwrap_or_else(|_| generate_task_id(&hashmap.values().cloned().collect::<Vec<_>>().join("")));
             }
             DownloadResource::Resolved(resolved) => {
-                // 根据url生成随机3232
-                task_id = generate_task_id(&resolved.url);
+                // 直接使用resolved的id
+                task_id = resolved.id;
             }
         }
 
         let resolved = self.resolver.resolve(&resource).await?;
 
         let mut pre_request = self.client.get(resolved.url.as_str());
+
+        if resolved.headers.len() > 0 {
+            for (key, value) in resolved.headers.iter() {
+                pre_request = pre_request.header(key, value);
+            }
+        }
+
         if let Some(auth) = &resolved.auth {
             match auth {
                 AuthMethod::Basic { username, password } => {
@@ -398,6 +405,12 @@ impl Downloader {
         let mut request = self.client.get(resolved.url.as_str());
         if current_len > 0 {
             request = request.header("Range", format!("bytes={}-", current_len));
+        }
+
+        if resolved.headers.len() > 0 {
+            for (key, value) in resolved.headers.iter() {
+                request = request.header(key, value);
+            }
         }
         if let Some(auth) = &resolved.auth {
             match auth {
