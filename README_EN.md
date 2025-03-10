@@ -158,6 +158,18 @@ You can see all traits at `vielpork::base::traits` and implement your own compon
 - Here is only 1 trait that you need to implement with async_trait:
   - `ResourceResolver`: A trait that allows the resolver to download resources from a specific source
 
+## 🤝 Contributing
+
+Contributions are welcome! Please make sure to:
+
+- Follow the official Rust coding style
+- Include test cases for new features
+- Run `cargo fmt` and `cargo clippy` before submitting
+
+## 📜 License
+
+This project is open-source under the [MIT License](LICENSE). Please respect the original author's copyright.
+
 ## Afterword (or the prologue)
 
 I found the word "viel" and then thought about "rufen", "ekstase", "reichen".

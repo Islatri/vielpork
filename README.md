@@ -157,6 +157,18 @@ async fn main() -> Result<()> {
 - 这里只有1个需要使用async_trait实现的trait：
   - `ResourceResolver`：允许解析器从特定来源下载资源的trait
 
+## 🤝 贡献指南
+
+欢迎通过Issue提交建议或Pull Request参与开发！请确保：
+
+- 遵循Rust官方编码规范
+- 新增功能需附带测试用例
+- 提交前运行`cargo fmt`和`cargo clippy`
+
+## 📜 开源协议
+
+本项目基于 [MIT License](LICENSE) 开源，请尊重原作者的著作权。
+
 ## 后记（或者说最开始的序章）
 
 最开始找到了viel这个词，后面想了下rufen、ekstase、reichen
