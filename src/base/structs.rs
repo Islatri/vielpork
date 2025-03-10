@@ -220,6 +220,7 @@ impl DownloadMeta {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedResource {
+    pub id: u32,
     pub url: String,
     pub headers: Vec<(String, String)>,
     pub auth: Option<AuthMethod>,

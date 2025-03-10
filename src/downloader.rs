@@ -317,6 +317,34 @@ impl Downloader {
         let save_interval = tokio::time::Duration::from_secs(1);
         let mut last_save = tokio::time::Instant::now();
 
+        let task_id: u32;
+        match resource.clone() {
+            DownloadResource::Url(url) => {
+                // 根据字符串生成随机3232
+                task_id = generate_task_id(&url);
+            }
+            DownloadResource::Id(id) => {
+                // 尝试解析为u32，否则根据字符串生成随机u32
+                task_id = id.parse().unwrap_or_else(|_| generate_task_id(&id));
+            }
+            DownloadResource::Params(params) => {
+                // 根据拼接后的字符串生成随机3232
+                // task_id = generate_task_id(&params.join(""));
+                // 尝试解析第一个值为u32，否则根据拼接后的字符串生成随机u32
+                task_id = params[0].parse().unwrap_or_else(|_| generate_task_id(&params.join("")));
+            }
+            DownloadResource::HashMap(hashmap) => {
+                // 根据拼接后值的字符串生成随机3232
+                // task_id = generate_task_id(&hashmap.values().cloned().collect::<Vec<_>>().join(""));
+                // 尝试解析第一个id键的值为u32，否则根据拼接后的字符串生成随机u32
+                task_id = hashmap.get("id").unwrap_or(&"".to_string()).parse().unwrap_or_else(|_| generate_task_id(&hashmap.values().cloned().collect::<Vec<_>>().join("")));
+            }
+            DownloadResource::Resolved(resolved) => {
+                // 根据url生成随机3232
+                task_id = generate_task_id(&resolved.url);
+            }
+        }
+
         let resolved = self.resolver.resolve(&resource).await?;
 
         let mut pre_request = self.client.get(resolved.url.as_str());
@@ -358,8 +386,8 @@ impl Downloader {
         }
 
         if current_len == total_size {
-            self.reporter.start_task(generate_task_id(&resolved.url), total_size).await?;
-            self.reporter.finish_task(generate_task_id(&resolved.url), DownloadResult::Success {
+            self.reporter.start_task(task_id, total_size).await?;
+            self.reporter.finish_task(task_id, DownloadResult::Success {
                 path: file_path.clone(),
                 size: total_size,
                 duration: tokio::time::Duration::from_secs(0),
@@ -398,29 +426,7 @@ impl Downloader {
             return Err(format!("HTTP error: {}", response.status()).into());
         }
 
-        let task_id: u32;
-        match resource {
-            DownloadResource::Url(url) => {
-                // 根据字符串生成随机3232
-                task_id = generate_task_id(&url);
-            }
-            DownloadResource::Id(id) => {
-                // 尝试解析为u32，否则根据字符串生成随机u32
-                task_id = id.parse().unwrap_or_else(|_| generate_task_id(&id));
-            }
-            DownloadResource::Params(params) => {
-                // 根据拼接后的字符串生成随机3232
-                task_id = generate_task_id(&params.join(""));
-            }
-            DownloadResource::HashMap(hashmap) => {
-                // 根据拼接后值的字符串生成随机3232
-                task_id = generate_task_id(&hashmap.values().cloned().collect::<Vec<_>>().join(""));
-            }
-            DownloadResource::Resolved(resolved) => {
-                // 根据url生成随机3232
-                task_id = generate_task_id(&resolved.url);
-            }
-        }
+        
 
         let task_url = resolved.url.clone();
 
@@ -442,8 +448,6 @@ impl Downloader {
         let mut stream = response.bytes_stream();
 
         let start_time = tokio::time::Instant::now();
-
-        // println!("Start downloading");
 
         while let Some(chunk) = stream.next().await {
             let global_state = self.state.read().await;
