@@ -2,11 +2,7 @@ use crate::task::{ DownloadTask, PersistentState, TaskStateRecord };
 use crate::base::traits::{ CombinedReporter, ResourceResolver };
 use crate::base::algorithms::rate_remaining_progress;
 use crate::base::enums::{
-    DownloadResult,
-    DownloaderState,
-    DownloadResource,
-    OperationType,
-    TaskState,
+    AuthMethod, DownloadResource, DownloadResult, DownloaderState, OperationType, TaskState
 };
 use crate::base::structs::{ DownloadProgress, DownloadOptions, ResolvedResource, DownloadMeta };
 use crate::error::Result;
@@ -323,26 +319,34 @@ impl Downloader {
 
         let resolved = self.resolver.resolve(&resource).await?;
 
-        let pre_request = self.client.get(resolved.url.as_str());
+        let mut pre_request = self.client.get(resolved.url.as_str());
+        if let Some(auth) = &resolved.auth {
+            match auth {
+                AuthMethod::Basic { username, password } => {
+                    let value = format!("{}:{}", username, password);
+                    let base64 = base64_simd::STANDARD;
+                    let encoded = base64.encode_to_string(value.as_bytes());
+                    let header = format!("Basic {}", encoded);
+                    pre_request = pre_request.header("Authorization", header);
+                }
+                AuthMethod::Bearer { token } => {
+                    pre_request = pre_request.header("Authorization", format!("Bearer {}", token));
+                }
+                AuthMethod::ApiKey { key, header } => {
+                    pre_request = pre_request.header(header, key);
+                }
+                AuthMethod::None => {}
+            }
+        }
+
         let pre_response = pre_request.send().await?;
         if
-            !pre_response.status().is_success() &&
-            pre_response.status() != reqwest::StatusCode::PARTIAL_CONTENT
+            !pre_response.status().is_success()
         {
             return Err(format!("HTTP error: {}", pre_response.status()).into());
         }
-        // 为了获知路径来取得下载进度，必须先获取meta
-        // 如果不依赖路径，就需要外部的downloading，获取到url对应的downloaded_bytes，来直接发送，但是，downloading不保证绝对正确，因为并非立即存储
-        // 如果遇到中断，downloading是很不可靠的
-        // 但是我现在3线程以上就会遇到，下载一秒后全部卡住，然后下载失败
-        // Download: Failed to download resource: error decoding response body
-        // Download: Failed to download resource: error decoding response body
-        // Download: Failed to download resource: error decoding response body
-        // Download: Failed to download resource: error decoding response body
-        // 问题原因是error decoding response body
         let meta = DownloadMeta::from_headers(pre_response.headers());
         drop(pre_response);
-        // println!("Meta {:?}", meta);
 
         let file_path = self.generate_path(&resource, &resolved, &meta).await?;
         
@@ -367,6 +371,24 @@ impl Downloader {
         if current_len > 0 {
             request = request.header("Range", format!("bytes={}-", current_len));
         }
+        if let Some(auth) = &resolved.auth {
+            match auth {
+                AuthMethod::Basic { username, password } => {
+                    let value = format!("{}:{}", username, password);
+                    let base64 = base64_simd::STANDARD;
+                    let encoded = base64.encode_to_string(value.as_bytes());
+                    let header = format!("Basic {}", encoded);
+                    request = request.header("Authorization", header);
+                }
+                AuthMethod::Bearer { token } => {
+                    request = request.header("Authorization", format!("Bearer {}", token));
+                }
+                AuthMethod::ApiKey { key, header } => {
+                    request = request.header(header, key);
+                }
+                AuthMethod::None => {}
+            }
+        }
         let response = request.send().await?;
 
         if
@@ -375,10 +397,6 @@ impl Downloader {
         {
             return Err(format!("HTTP error: {}", response.status()).into());
         }
-
-        // println!("Downloading {} to {:?}", resolved.url, file_path);
-
-        // let total_size = response.content_length().unwrap_or(0) + current_len;
 
         let task_id: u32;
         match resource {
@@ -567,8 +585,6 @@ impl Downloader {
                 duration: start_time.elapsed(),
             }).await?;
         } else {
-            // downloaded.len() != total_size，说明下载的文件大小不对
-            // 此时应该删除文件，标记任务为失败
             tokio::fs::remove_file(&file_path).await?;
             task.transition_state(TaskState::Failed).await?;
             self.reporter.finish_task(task_id, DownloadResult::Failed {

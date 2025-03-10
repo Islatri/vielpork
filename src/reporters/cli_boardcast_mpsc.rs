@@ -15,18 +15,11 @@ impl CliReporterBoardcastMpsc {
         Self { inner_tx, buffer_size }
     }
 
-    // 将 broadcast 接收端转换为 mpsc 接收端
     pub fn subscribe_mpsc(&self) -> tokio::sync::mpsc::Receiver<ProgressEvent> {
         let (tx, rx) = tokio::sync::mpsc::channel(self.buffer_size);
         let mut inner_rx = self.inner_tx.subscribe();
         
-        // 启动转发任务
         tokio::spawn(async move {
-            // while let Ok(event) = inner_rx.recv().await {
-            //     if tx.send(event).await.is_err() {
-            //         break;
-            //     }
-            // }
             loop {
                 match inner_rx.recv().await {
                     Ok(event) => {
@@ -35,7 +28,6 @@ impl CliReporterBoardcastMpsc {
                         }
                     }
                     Err(_) => {
-                        // 可以选择重试或等待一段时间
                         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     }
                 }

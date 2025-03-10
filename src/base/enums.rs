@@ -48,8 +48,8 @@ pub enum DownloadResult {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AuthMethod {
     None,
-    BasicAuth { username: String, password: String },
-    OAuth2 { token: String },
+    Basic { username: String, password: String },
+    Bearer { token: String },
     ApiKey { key: String, header: String },
 }
 
