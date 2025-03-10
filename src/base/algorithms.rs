@@ -1,13 +1,13 @@
-use crate::error::Result;
 use crate::base::enums::DownloadResource;
-use crate::base::structs::{ DownloadMeta, ResolvedResource };
-use crate::template::{ TemplateRenderer, TemplateContext };
+use crate::base::structs::{DownloadMeta, ResolvedResource};
+use crate::error::Result;
+use crate::template::{TemplateContext, TemplateRenderer};
 // use crate::hash::{HashSource, HashFormat};
 
-use std::time::Duration;
-use std::collections::HashMap;
 use chrono::Utc;
-use std::path::{ Path, PathBuf, Component };
+use std::collections::HashMap;
+use std::path::{Component, Path, PathBuf};
+use std::time::Duration;
 
 // 函数一：计算当前下载速度
 pub fn rate(downloaded: u64, elapsed: Duration) -> f64 {
@@ -47,7 +47,7 @@ pub fn progress(downloaded: u64, total: u64) -> f64 {
 pub fn rate_remaining_progress(
     downloaded: u64,
     total: u64,
-    elapsed: Duration
+    elapsed: Duration,
 ) -> (f64, Duration, f64) {
     let rate = rate(downloaded, elapsed);
     let remaining_time = remaining_time(downloaded, total, elapsed);
@@ -57,15 +57,14 @@ pub fn rate_remaining_progress(
 
 /// 解析Content-Disposition头获取文件名（支持RFC 5987编码）
 pub fn parse_content_disposition(header_value: &str) -> Option<String> {
-    let re = regex::Regex
-        ::new(
-            r#"(?x)
+    let re = regex::Regex::new(
+        r#"(?x)
         (?:filename\*=(UTF-8|ISO-8859-1)'[^']*'(?P<enc_filename>[^;]+)) |
         (?:filename="(?P<quoted_filename>(?:\\"|[^"])+)") |
         (?:filename=(?P<plain_filename>[^;]+))
-        "#
-        )
-        .unwrap();
+        "#,
+    )
+    .unwrap();
 
     let captures = re.captures(header_value)?;
 
@@ -80,12 +79,16 @@ pub fn parse_content_disposition(header_value: &str) -> Option<String> {
     }
 
     // 处理普通文件名
-    captures.name("plain_filename").map(|m| m.as_str().trim().to_string())
+    captures
+        .name("plain_filename")
+        .map(|m| m.as_str().trim().to_string())
 }
 
 /// 解码RFC 5987编码的文件名
 fn decode_encoded_filename(filename: &str, encoding: &str) -> Option<String> {
-    let decoded = percent_encoding::percent_decode_str(filename).decode_utf8().ok()?;
+    let decoded = percent_encoding::percent_decode_str(filename)
+        .decode_utf8()
+        .ok()?;
 
     match encoding.to_uppercase().as_str() {
         "UTF-8" => Some(decoded.to_string()),
@@ -98,7 +101,10 @@ fn decode_encoded_filename(filename: &str, encoding: &str) -> Option<String> {
 }
 
 pub async fn organize_by_type(meta: &DownloadMeta) -> Result<PathBuf> {
-    let mime_type = meta.content_type.as_deref().unwrap_or("application/octet-stream");
+    let mime_type = meta
+        .content_type
+        .as_deref()
+        .unwrap_or("application/octet-stream");
     let categories = match mime_type.split('/').next().unwrap() {
         "image" => "media/images",
         "video" => "media/videos",
@@ -111,8 +117,7 @@ pub async fn organize_by_type(meta: &DownloadMeta) -> Result<PathBuf> {
 }
 
 pub async fn organize_by_domain(resolved: &ResolvedResource) -> Result<PathBuf> {
-    let domain = reqwest::Url
-        ::parse(&resolved.url)
+    let domain = reqwest::Url::parse(&resolved.url)
         .map_err(|_| "Invalid URL")?
         .host_str()
         .map(|h| h.to_string())
@@ -122,11 +127,11 @@ pub async fn organize_by_domain(resolved: &ResolvedResource) -> Result<PathBuf> 
 
 pub async fn auto_filename(resolved: &ResolvedResource, meta: &DownloadMeta) -> Result<String> {
     // 优先从 Content-Disposition 头获取
-    if
-        let Some(disposition) = resolved.headers
-            .iter()
-            .find(|(k, _)| k == "Content-Disposition")
-            .map(|(_, v)| v)
+    if let Some(disposition) = resolved
+        .headers
+        .iter()
+        .find(|(k, _)| k == "Content-Disposition")
+        .map(|(_, v)| v)
     {
         if let Some(filename) = parse_content_disposition(disposition) {
             return Ok(filename);
@@ -134,32 +139,25 @@ pub async fn auto_filename(resolved: &ResolvedResource, meta: &DownloadMeta) -> 
     }
 
     // 从 URL 路径获取文件名
-    if
-        let Some(url_filename) = reqwest::Url
-            ::parse(&resolved.url)
-            .ok()
-            .and_then(|u| u.path_segments().and_then(|s| s.last().map(|s| s.to_string())))
-    {
-        
+    if let Some(url_filename) = reqwest::Url::parse(&resolved.url).ok().and_then(|u| {
+        u.path_segments()
+            .and_then(|s| s.last().map(|s| s.to_string()))
+    }) {
         if url_filename.is_empty() {
             return generate_random_filename(meta);
-        } else{
+        } else {
             return Ok(url_filename.to_string());
         }
-        
     }
 
     generate_random_filename(meta)
 }
 
 fn generate_random_filename(meta: &DownloadMeta) -> Result<String> {
-    let ext = meta.suggested_filename
+    let ext = meta
+        .suggested_filename
         .as_ref()
-        .and_then(|s|
-            PathBuf::from(s)
-                .extension()
-                .map(|e| e.to_os_string())
-        )
+        .and_then(|s| PathBuf::from(s).extension().map(|e| e.to_os_string()))
         .and_then(|e| e.to_str().map(|s| s.to_string()))
         .unwrap_or("bin".to_string());
     let random_name = uuid::Uuid::new_v4().to_string();
@@ -168,16 +166,23 @@ fn generate_random_filename(meta: &DownloadMeta) -> Result<String> {
 
 // 把%20等转义字符替换成对应的字符
 fn clearify_filename(name: &str) -> String {
-    percent_encoding::percent_decode_str(name).decode_utf8_lossy().to_string()
+    percent_encoding::percent_decode_str(name)
+        .decode_utf8_lossy()
+        .to_string()
 }
-
 
 fn sanitize_filename(name: &str) -> String {
     let replace_char = '_';
     let blacklist = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
     name.chars()
-        .map(|c| if blacklist.contains(&c) { replace_char } else { c })
+        .map(|c| {
+            if blacklist.contains(&c) {
+                replace_char
+            } else {
+                c
+            }
+        })
         .collect()
 }
 
@@ -201,17 +206,20 @@ pub async fn custom_filename(
     renderer: &TemplateRenderer,
     meta: &DownloadMeta,
     template: &str,
-    max_length: usize
+    max_length: usize,
 ) -> Result<String> {
     // 创建模板渲染上下文
     let parsed_url = reqwest::Url::parse(&resolved.url).ok();
 
-    let domain = parsed_url.as_ref().and_then(|u| u.host_str().map(|s| s.to_string()));
+    let domain = parsed_url
+        .as_ref()
+        .and_then(|u| u.host_str().map(|s| s.to_string()));
     let context = TemplateContext {
         url: &resolved.url,
         domain: domain.as_deref(),
         filename: meta.suggested_filename.as_deref().unwrap_or_else(|| "file"),
-        extension: meta.suggested_filename
+        extension: meta
+            .suggested_filename
             .as_ref()
             .and_then(|f| Path::new(f).extension())
             .and_then(|e| e.to_str()),
@@ -230,7 +238,9 @@ pub async fn custom_filename(
     // println!("Template: {}", template);
     // println!("Context: {:?}", context);
     // 渲染模板
-    let raw_name = renderer.render_path_template(template, &context).map_err(|e| e)?;
+    let raw_name = renderer
+        .render_path_template(template, &context)
+        .map_err(|e| e)?;
 
     // println!("Raw name: {}", raw_name);
 
@@ -249,9 +259,11 @@ pub async fn custom_filename(
 pub async fn custom_directory(
     template: &str,
     context: &TemplateContext<'_>,
-    renderer: &TemplateRenderer
+    renderer: &TemplateRenderer,
 ) -> Result<PathBuf> {
-    let dir_path = renderer.render_path_template(template, context).map_err(|e| e)?;
+    let dir_path = renderer
+        .render_path_template(template, context)
+        .map_err(|e| e)?;
 
     // 清理路径中的非法字符
     let sanitized_path = sanitize_path(&dir_path)?;

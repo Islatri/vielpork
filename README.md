@@ -59,7 +59,7 @@ stateDiagram-v2
 
 ## 相关项目
 
-- [osynic_downloader](https://crates.io/crates/osynic_downloader): 基于vielpork的osu!谱面下载器，包含工具库和TUI应用
+- [osynic_downloader](https://github.com/osynicite/osynic_downloader): 基于vielpork的osu!谱面下载器，包含工具库和TUI应用
 
 ![osynic_downloader.gif](https://s2.loli.net/2025/03/10/hasqOmgctyG4TWd.gif)
 
@@ -159,7 +159,11 @@ async fn main() -> Result<()> {
 
 ## 🤝 贡献指南
 
-欢迎通过Issue提交建议或Pull Request参与开发！请确保：
+这个库是差不多一个上午写完的，所以肯定还有很多地方需要改进，目前也只是满足了我自己的项目需求，不能保证完全符合所有人的需求。
+
+所以，如果代码有任何问题，或者你有任何建议，欢迎提交PR或者Issue，我会尽快处理~
+
+如果你想贡献代码，请遵循以下规则：
 
 - 遵循Rust官方编码规范
 - 新增功能需附带测试用例

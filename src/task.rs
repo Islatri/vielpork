@@ -1,15 +1,12 @@
-
-
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
-use serde::{Serialize, Deserialize};
 
 use crate::base::enums::TaskState;
 use crate::base::structs::DownloadProgress;
 use crate::error::Result;
-
 
 #[derive(Serialize, Deserialize)]
 pub struct PersistentState {
@@ -26,7 +23,7 @@ pub struct TaskStateRecord {
     pub state: TaskState,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct DownloadTask {
     pub id: u32,
     pub url: String,
@@ -39,7 +36,7 @@ pub struct DownloadTask {
 }
 
 impl DownloadTask {
-    pub fn new(id: u32,url:String ,file_path: PathBuf, total_size: u64) -> Self {
+    pub fn new(id: u32, url: String, file_path: PathBuf, total_size: u64) -> Self {
         Self {
             id,
             url,
@@ -73,7 +70,7 @@ impl DownloadTask {
             (TaskState::Paused, TaskState::Downloading) => true,
             (TaskState::Downloading, TaskState::Completed) => true,
             (TaskState::Downloading, TaskState::Failed) => true,
-            (TaskState::Failed,_) => true,
+            (TaskState::Failed, _) => true,
             (_, TaskState::Canceled) => true,
             _ => false,
         };
@@ -82,10 +79,7 @@ impl DownloadTask {
             *current = new_state;
             Ok(())
         } else {
-            Err(format!(
-                "Cannot transition from {:?} to {:?}",
-                *current, new_state
-            ).into())
+            Err(format!("Cannot transition from {:?} to {:?}", *current, new_state).into())
         }
     }
 

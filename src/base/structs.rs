@@ -1,7 +1,7 @@
 use super::algorithms::parse_content_disposition;
 use super::enums::{AuthMethod, FileChecksum};
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadProgress {
     pub bytes_downloaded: u64,
@@ -28,8 +28,6 @@ pub struct DownloadProgress {
 //     pub progress_percentage: Option<f64>,
 // }
 
-
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadOptions {
     // 基础配置
@@ -39,7 +37,7 @@ pub struct DownloadOptions {
     pub create_dirs: bool,
     /// 文件名策略
     pub path_policy: PathPolicy,
-    
+
     // 网络配置
     /// 自定义HTTP头
     #[serde(default)]
@@ -52,7 +50,7 @@ pub struct DownloadOptions {
     pub max_redirects: u32,
     /// 是否验证TLS证书
     pub tls_verify: bool,
-    
+
     // 并发控制
     /// 最大并发连接数
     pub concurrency: u32,
@@ -60,13 +58,13 @@ pub struct DownloadOptions {
     pub chunk_size: Option<u64>,
     /// 是否启用范围请求
     pub enable_range: bool,
-    
+
     // 流量控制
     /// 全局速率限制（字节/秒）
     pub rate_limit: Option<u64>,
     /// 每个连接的速率限制（字节/秒）
     pub per_connection_rate_limit: Option<u64>,
-    
+
     // 高级功能
     /// 最大重试次数
     pub max_retries: u32,
@@ -150,29 +148,28 @@ impl DownloadOptions {
         self.resume_download = resume;
         self
     }
-
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadMeta {
     /// 从Content-Type头获取的MIME类型
     pub content_type: Option<String>,
-    
+
     /// 服务器返回的ETag（用于缓存验证）
     pub etag: Option<String>,
-    
+
     /// 最后修改时间（Last-Modified头）
     pub last_modified: Option<String>,
-    
+
     /// 通过Content-Length获取的预期大小
     pub expected_size: Option<u64>,
-    
+
     /// 从Content-Disposition解析的文件名
     pub suggested_filename: Option<String>,
-    
+
     /// 下载开始时间戳
     pub download_start: Option<DateTime<Utc>>,
-    
+
     /// 文件校验信息（可后续填充）
     pub checksum: Option<FileChecksum>,
 }
@@ -216,8 +213,6 @@ impl DownloadMeta {
     }
 }
 
-
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedResource {
     pub id: u32,
@@ -228,25 +223,25 @@ pub struct ResolvedResource {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PathPolicy {
-    /// 命名策略：auto | custom 
+    /// 命名策略：auto | custom
     pub naming: String,
-    
+
     /// 自定义命名模板（使用类似 mustache 的语法）
     /// 可用变量：{url}, {domain}, {ext}, {filename}, {date}, {time}, {size}
     pub template: Option<String>,
-    
+
     /// 目录组织结构：flat | by_type | by_domain | custom
     pub organization: String,
-    
+
     /// 自定义目录结构模板
     pub dir_template: Option<String>,
-    
+
     /// 冲突解决策略：overwrite | rename | error
     pub conflict: String,
-    
+
     /// 自动清理非法字符
     pub sanitize: bool,
-    
+
     /// 最大文件名长度
     pub max_length: Option<usize>,
 }
@@ -300,4 +295,3 @@ impl PathPolicy {
         self
     }
 }
-

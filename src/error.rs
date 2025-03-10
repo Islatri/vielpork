@@ -1,13 +1,13 @@
 pub type Result<T> = core::result::Result<T, Error>;
 
 pub struct Error {
-    inner: Box<ErrorKind>
+    inner: Box<ErrorKind>,
 }
 
 impl Error {
     pub fn new(kind: ErrorKind) -> Self {
         Self {
-            inner: Box::new(kind)
+            inner: Box::new(kind),
         }
     }
 }
@@ -31,7 +31,6 @@ impl From<ErrorKind> for Error {
         Self::new(kind)
     }
 }
-
 
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
@@ -69,7 +68,9 @@ impl From<tokio::sync::mpsc::error::SendError<crate::base::enums::ProgressEvent>
 }
 
 impl From<tokio::sync::broadcast::error::SendError<crate::base::enums::ProgressEvent>> for Error {
-    fn from(e: tokio::sync::broadcast::error::SendError<crate::base::enums::ProgressEvent>) -> Self {
+    fn from(
+        e: tokio::sync::broadcast::error::SendError<crate::base::enums::ProgressEvent>,
+    ) -> Self {
         Error::new(ErrorKind::TokioBroadcastSendError(e))
     }
 }
@@ -100,7 +101,9 @@ pub enum ErrorKind {
     HandlebarsRenderError(handlebars::RenderError),
     ChronoParseError(chrono::ParseError),
     TokioMpscSendError(tokio::sync::mpsc::error::SendError<crate::base::enums::ProgressEvent>),
-    TokioBroadcastSendError(tokio::sync::broadcast::error::SendError<crate::base::enums::ProgressEvent>),
+    TokioBroadcastSendError(
+        tokio::sync::broadcast::error::SendError<crate::base::enums::ProgressEvent>,
+    ),
     #[cfg(feature = "tui")]
     IndicatifTemplateError(indicatif::style::TemplateError),
 }
@@ -116,7 +119,7 @@ impl std::fmt::Debug for ErrorKind {
             ErrorKind::ChronoParseError(e) => write!(f, "{}", e),
             ErrorKind::TokioMpscSendError(e) => write!(f, "TokioMpscSendError: {}", e),
             ErrorKind::TokioBroadcastSendError(e) => write!(f, "TokioBroadcastSendError: {}", e),
-            
+
             #[cfg(feature = "tui")]
             ErrorKind::IndicatifTemplateError(e) => write!(f, "{}", e),
         }

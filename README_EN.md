@@ -58,7 +58,7 @@ stateDiagram-v2
 
 # Related Projects
 
-- [osynic_downloader](https://crates.io/crates/osynic_downloader): A osu beatmapsets downloader lib & TUI application based on vielpork.
+- [osynic_downloader](https://github.com/osynicite/osynic_downloader): A osu beatmapsets downloader lib & TUI application based on vielpork.
 
 ![osynic_downloader.gif](https://s2.loli.net/2025/03/10/hasqOmgctyG4TWd.gif)
 
@@ -160,7 +160,11 @@ You can see all traits at `vielpork::base::traits` and implement your own compon
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please make sure to:
+This library was written in about a morning, so there are definitely many areas that need improvement. At present, it only meets the requirements of my own project and cannot guarantee that it will fully meet everyone's requirements.
+
+So, if there are any problems with the code, or if you have any suggestions, please feel free to submit a PR or Issue, and I will handle it as soon as possible~
+
+If you want to contribute code, please follow these rules:
 
 - Follow the official Rust coding style
 - Include test cases for new features

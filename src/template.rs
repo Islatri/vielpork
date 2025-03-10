@@ -1,7 +1,7 @@
-use crate::error::Result;
 use crate::base::structs::DownloadMeta;
-use handlebars::Handlebars;
+use crate::error::Result;
 use chrono::{DateTime, Utc};
+use handlebars::Handlebars;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -13,7 +13,7 @@ impl TemplateRenderer {
     pub fn new() -> Self {
         let mut registry = Handlebars::new();
         registry.register_escape_fn(|s| s.into()); // 禁用HTML转义
-        
+
         // 注册自定义helper
         registry.register_helper("date_format", Box::new(date_format_helper));
         registry.register_helper("file_extension", Box::new(file_extension_helper));
@@ -68,15 +68,19 @@ fn date_format_helper(
     h: &handlebars::Helper<'_>,
     _: &Handlebars<'_>,
     _: &handlebars::Context,
-    _: &mut handlebars::RenderContext<'_,'_>,
+    _: &mut handlebars::RenderContext<'_, '_>,
     out: &mut dyn handlebars::Output,
 ) -> handlebars::HelperResult {
-    let format = h.param(1).and_then(|v| v.value().as_str()).unwrap_or("%Y-%m-%d");
+    let format = h
+        .param(1)
+        .and_then(|v| v.value().as_str())
+        .unwrap_or("%Y-%m-%d");
     let timestamp = h.param(0).and_then(|v| v.value().as_str()).unwrap_or("");
-    
+
     let dt = DateTime::parse_from_rfc3339(timestamp)
-        .or_else(|_| DateTime::parse_from_str(timestamp, "%Y-%m-%d %H:%M:%S")).unwrap_or_default();
-    
+        .or_else(|_| DateTime::parse_from_str(timestamp, "%Y-%m-%d %H:%M:%S"))
+        .unwrap_or_default();
+
     out.write(&dt.format(format).to_string())?;
     Ok(())
 }
@@ -86,7 +90,7 @@ fn file_extension_helper(
     h: &handlebars::Helper<'_>,
     _: &Handlebars<'_>,
     _: &handlebars::Context,
-    _: &mut handlebars::RenderContext<'_,'_>,
+    _: &mut handlebars::RenderContext<'_, '_>,
     out: &mut dyn handlebars::Output,
 ) -> handlebars::HelperResult {
     let filename = h.param(0).and_then(|v| v.value().as_str()).unwrap_or("");
@@ -94,7 +98,7 @@ fn file_extension_helper(
         .extension()
         .and_then(|s| s.to_str())
         .unwrap_or("");
-    
+
     out.write(ext)?;
     Ok(())
 }

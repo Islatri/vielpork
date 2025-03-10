@@ -1,24 +1,27 @@
-use crate::error::Result;
-use crate::base::traits::{ProgressReporter, ResultReporter};
+use crate::base::enums::{DownloadResult, OperationType, ProgressEvent};
 use crate::base::structs::DownloadProgress;
-use crate::base::enums::{ProgressEvent, DownloadResult, OperationType};
+use crate::base::traits::{ProgressReporter, ResultReporter};
+use crate::error::Result;
 use async_trait::async_trait;
 
-#[derive(Debug,Clone)]
-pub struct CliReporterBoardcastMpsc{
+#[derive(Debug, Clone)]
+pub struct CliReporterBoardcastMpsc {
     inner_tx: tokio::sync::broadcast::Sender<ProgressEvent>,
     buffer_size: usize,
 }
 impl CliReporterBoardcastMpsc {
     pub fn new(buffer_size: usize) -> Self {
         let (inner_tx, _) = tokio::sync::broadcast::channel(buffer_size);
-        Self { inner_tx, buffer_size }
+        Self {
+            inner_tx,
+            buffer_size,
+        }
     }
 
     pub fn subscribe_mpsc(&self) -> tokio::sync::mpsc::Receiver<ProgressEvent> {
         let (tx, rx) = tokio::sync::mpsc::channel(self.buffer_size);
         let mut inner_rx = self.inner_tx.subscribe();
-        
+
         tokio::spawn(async move {
             loop {
                 match inner_rx.recv().await {
@@ -33,7 +36,7 @@ impl CliReporterBoardcastMpsc {
                 }
             }
         });
-        
+
         rx
     }
 
@@ -51,26 +54,40 @@ impl CliReporterBoardcastMpsc {
 
 #[async_trait]
 impl ProgressReporter for CliReporterBoardcastMpsc {
-    async fn start_task(&self, task_id: u32, total: u64) ->Result<()> {
+    async fn start_task(&self, task_id: u32, total: u64) -> Result<()> {
         self.send(ProgressEvent::Start { task_id, total }).await?;
         Ok(())
     }
 
-    async fn update_progress(&self, task_id: u32, progress: &DownloadProgress)->Result<()> {
-        self.send(ProgressEvent::Update { task_id, progress: progress.clone() }).await?;
+    async fn update_progress(&self, task_id: u32, progress: &DownloadProgress) -> Result<()> {
+        self.send(ProgressEvent::Update {
+            task_id,
+            progress: progress.clone(),
+        })
+        .await?;
         Ok(())
     }
 
-    async fn finish_task(&self, task_id: u32,finish: DownloadResult) ->Result<()>{
-        self.send(ProgressEvent::Finish { task_id ,finish}).await?;
+    async fn finish_task(&self, task_id: u32, finish: DownloadResult) -> Result<()> {
+        self.send(ProgressEvent::Finish { task_id, finish }).await?;
         Ok(())
     }
 }
 
 #[async_trait]
 impl ResultReporter for CliReporterBoardcastMpsc {
-    async fn operation_result(&self, operation: OperationType, code: u32, message: String) ->Result<()> {
-        self.send(ProgressEvent::OperationResult { operation, code, message }).await?;
+    async fn operation_result(
+        &self,
+        operation: OperationType,
+        code: u32,
+        message: String,
+    ) -> Result<()> {
+        self.send(ProgressEvent::OperationResult {
+            operation,
+            code,
+            message,
+        })
+        .await?;
         Ok(())
     }
 }

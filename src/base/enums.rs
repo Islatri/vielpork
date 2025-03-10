@@ -1,34 +1,45 @@
-use super::structs::{ResolvedResource, DownloadProgress};
-use serde::{Serialize, Deserialize};
+use super::structs::{DownloadProgress, ResolvedResource};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum DownloaderState {
     #[default]
-    Idle,      
-    Running,   
-    Suspended,    
-    Stopped,   
+    Idle,
+    Running,
+    Suspended,
+    Stopped,
 }
 
-#[derive(Debug, Clone, Copy, Eq,PartialEq, Default,Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Default, Serialize, Deserialize)]
 pub enum TaskState {
     #[default]
-    Pending,     
-    Downloading, 
-    Paused,      
-    Completed,   
+    Pending,
+    Downloading,
+    Paused,
+    Completed,
     Canceled,
-    Failed,      
+    Failed,
 }
 
 #[derive(Clone)]
-pub enum ProgressEvent { 
-    Start { task_id: u32, total: u64 },
-    Update { task_id: u32, progress: DownloadProgress },
-    Finish { task_id: u32 ,finish: DownloadResult},
+pub enum ProgressEvent {
+    Start {
+        task_id: u32,
+        total: u64,
+    },
+    Update {
+        task_id: u32,
+        progress: DownloadProgress,
+    },
+    Finish {
+        task_id: u32,
+        finish: DownloadResult,
+    },
     OperationResult {
-        operation: OperationType, code: u32, message: String
+        operation: OperationType,
+        code: u32,
+        message: String,
     },
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,13 +75,13 @@ pub enum OperationType {
     PauseAll,
     ResumeAll,
     CancelAll,
-    
+
     // 单任务操作
     StartTask(u32),
     PauseTask(u32),
     ResumeTask(u32),
     CancelTask(u32),
-    
+
     // 系统级操作
     ChangeConcurrency(u32),
     SetRateLimit(u64),
@@ -106,7 +117,7 @@ pub enum FileChecksum {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DownloadResource {
     Url(String),
-    Id(String), 
+    Id(String),
     Params(Vec<String>),
     HashMap(HashMap<String, String>),
     Resolved(ResolvedResource),
