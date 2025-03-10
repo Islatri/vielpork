@@ -17,6 +17,8 @@
 <p align="center">
   <hr />
 
+[中午版本](README.md)
+
 **Vielpork** is a Rust-powered HTTP downloader designed for performance and extensibility. It offers:
 
 - 🚀 Multi-threaded downloading for maximum speed
