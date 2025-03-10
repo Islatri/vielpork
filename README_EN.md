@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD033 MD041 MD045 -->
 <p align="center" dir="auto">
     <img style="height:240px;width:280px"  src="https://s2.loli.net/2025/03/09/ho9EQVWa8zYxP2J.jpg" alt="Logo逃走啦~"/>
 </p>
@@ -8,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://www.rust-lang.org/" target="_blank"><img src="https://img.shields.io/badge/Rust-1.85%2B-blue"/></a>
   <a href="https://crates.io/crates/vielpork" target="_blank"><img src="https://img.shields.io/crates/v/vielpork"/></a>
   <a href="https://docs.rs/vielpork" target="_blank"><img src="https://img.shields.io/docsrs/vielpork/0.1.0"/></a>
   <a href="https://github.com/islatri/vielpork" target="_blank"><img src="https://img.shields.io/badge/License-MIT-green.svg"/></a>
@@ -17,7 +19,7 @@
 <p align="center">
   <hr />
 
-[中文版本](README.md)
+[中文版本](README.md) | [English Version](README_EN.md)
 
 **Vielpork** is a Rust-powered HTTP downloader designed for performance and extensibility. It offers:
 
