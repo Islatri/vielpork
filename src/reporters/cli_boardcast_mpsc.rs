@@ -79,11 +79,13 @@ impl ResultReporter for CliReporterBoardcastMpsc {
     async fn operation_result(
         &self,
         operation: OperationType,
+        task_id: u32,
         code: u32,
         message: String,
     ) -> Result<()> {
         self.send(ProgressEvent::OperationResult {
             operation,
+            task_id,
             code,
             message,
         })

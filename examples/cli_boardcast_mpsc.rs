@@ -45,10 +45,11 @@ async fn main() -> Result<()> {
                 }
                 ProgressEvent::OperationResult {
                     operation,
+                    task_id,
                     code,
                     message,
                 } => {
-                    println!("Operation result: {:?} - {} - {}", operation, code, message);
+                    println!("Operation result: {:?} - {} - {} - {}", operation, task_id, code, message);
                 }
             }
         }

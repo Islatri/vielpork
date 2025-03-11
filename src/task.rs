@@ -62,15 +62,15 @@ impl DownloadTask {
         }
 
         let valid = match (*current, new_state) {
-            (TaskState::Pending, TaskState::Paused) => true,
-            (TaskState::Paused, TaskState::Pending) => true,
+            (TaskState::Paused, TaskState::Downloading) => true,
             (TaskState::Paused, TaskState::Paused) => true,
+            (TaskState::Paused, TaskState::Pending) => true,
+            (TaskState::Pending, TaskState::Paused) => true,
             (TaskState::Pending, TaskState::Downloading) => true,
             (TaskState::Downloading, TaskState::Paused) => true,
-            (TaskState::Paused, TaskState::Downloading) => true,
             (TaskState::Downloading, TaskState::Completed) => true,
-            (TaskState::Downloading, TaskState::Failed) => true,
             (TaskState::Failed, _) => true,
+            (_, TaskState::Failed) => true,
             (_, TaskState::Canceled) => true,
             _ => false,
         };

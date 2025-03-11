@@ -38,6 +38,7 @@ pub enum ProgressEvent {
     },
     OperationResult {
         operation: OperationType,
+        task_id: u32,
         code: u32,
         message: String,
     },
@@ -66,9 +67,7 @@ pub enum AuthMethod {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum OperationType {
-    // 下载结果
-    Download,
-    DownloadTask(u32),
+
 
     // 全局操作
     StartAll,
@@ -85,6 +84,42 @@ pub enum OperationType {
     // 系统级操作
     ChangeConcurrency(u32),
     SetRateLimit(u64),
+
+    // 下载结果
+    Download,
+    DownloadTask(u32),
+}
+
+impl OperationType{
+    pub fn to_i32(&self) -> i32 {
+        match self {
+            OperationType::StartAll => 0,
+            OperationType::PauseAll => 1,
+            OperationType::ResumeAll => 2,
+            OperationType::CancelAll => 3,
+            OperationType::StartTask(_) => 4,
+            OperationType::PauseTask(_) => 5,
+            OperationType::ResumeTask(_) => 6,
+            OperationType::CancelTask(_) => 7,
+            OperationType::ChangeConcurrency(_) => 8,
+            OperationType::SetRateLimit(_) => 9,
+            OperationType::Download => 10,
+            OperationType::DownloadTask(_) => 11,
+            
+        }
+    }
+    pub fn is_global(&self) -> bool {
+        match self {
+            OperationType::StartAll
+            | OperationType::PauseAll
+            | OperationType::ResumeAll
+            | OperationType::CancelAll
+            | OperationType::ChangeConcurrency(_)
+            | OperationType::SetRateLimit(_) => true,
+            _ => false,
+        }
+    }
+
 }
 
 impl std::fmt::Display for OperationType {

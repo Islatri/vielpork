@@ -141,13 +141,14 @@ impl ResultReporter for TuiReporter {
     async fn operation_result(
         &self,
         operation: OperationType,
+        task_id: u32,
         code: u32,
         message: String,
     ) -> Result<()> {
         if code == 200 {
-            println!("{}: {}", operation, message);
+            println!("{} at {}: {}", operation,task_id, message);
         } else {
-            eprintln!("{}: {}", operation, message);
+            eprintln!("{} at {}: {}", operation,task_id, message);
         }
         Ok(())
     }

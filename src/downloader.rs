@@ -21,11 +21,12 @@ use tokio::sync::RwLock;
 pub struct Downloader {
     client: reqwest::Client,
     options: Arc<RwLock<DownloadOptions>>,
-    state: Arc<RwLock<DownloaderState>>,
-    tasks: Arc<RwLock<Vec<DownloadTask>>>,
+    pub state: Arc<RwLock<DownloaderState>>,
+    pub tasks: Arc<RwLock<Vec<DownloadTask>>>,
     resolver: Arc<Box<dyn ResourceResolver>>,
     reporter: Arc<Box<dyn CombinedReporter>>,
     state_notifier: tokio::sync::broadcast::Sender<DownloaderState>,
+    cancel_token: tokio_util::sync::CancellationToken,
 }
 
 impl Downloader {
@@ -47,6 +48,7 @@ impl Downloader {
             resolver: Arc::new(resolver),
             reporter: Arc::new(reporter),
             state_notifier: tokio::sync::broadcast::channel(128).0,
+            cancel_token: tokio_util::sync::CancellationToken::new(),
         }
     }
 
@@ -55,11 +57,12 @@ impl Downloader {
 
         // 定义合法状态转换
         let valid = match (*current, new_state) {
+            (DownloaderState::Idle, DownloaderState::Idle) => true,
             (DownloaderState::Idle, DownloaderState::Running) => true,
             (DownloaderState::Running, DownloaderState::Suspended) => true,
             (DownloaderState::Suspended, DownloaderState::Running) => true,
-            (DownloaderState::Running, DownloaderState::Stopped) => true,
-            (DownloaderState::Suspended, DownloaderState::Stopped) => true,
+            (DownloaderState::Stopped, DownloaderState::Idle) => true,
+            (_, DownloaderState::Stopped) => true,
             _ => false,
         };
 
@@ -133,6 +136,8 @@ impl Downloader {
         optimized
     }
     pub async fn start(&self, resources: Vec<DownloadResource>) -> Result<()> {
+        self.init().await?;
+
         let options = self.get_options().await;
         let save_path = &options.save_path;
         let state_path = PathBuf::from(save_path).join("downloading.json");
@@ -156,6 +161,7 @@ impl Downloader {
                 reporter
                     .operation_result(
                         OperationType::Download,
+                        0,
                         500,
                         format!("Download failed: {}", e),
                     )
@@ -174,7 +180,12 @@ impl Downloader {
         self.transition_state(DownloaderState::Running).await
     }
     pub async fn stop(&self) -> Result<()> {
+        self.tasks.write().await.clear();
         self.transition_state(DownloaderState::Stopped).await
+    }
+    pub async fn init(&self) -> Result<()> {
+        self.tasks.write().await.clear();
+        self.transition_state(DownloaderState::Idle).await
     }
 
     async fn generate_path(
@@ -296,6 +307,7 @@ impl Downloader {
                         self.reporter
                             .operation_result(
                                 OperationType::Download,
+                                0,
                                 500,
                                 format!("Failed to download resource: {}", e),
                             )
@@ -312,10 +324,20 @@ impl Downloader {
 
         tokio::fs::remove_file(PathBuf::from(&options.save_path).join("downloading.json")).await?;
 
+        self.reporter.operation_result(OperationType::Download, 0, 200, "All Tasks Completed".to_string()).await?;
+
         Ok(())
     }
 
     async fn download_task(&self, resource: DownloadResource) -> Result<()> {
+
+        
+        let global_state = self.state.read().await;
+        if *global_state == DownloaderState::Stopped {
+            return Ok(());
+        }
+        drop(global_state);
+
         let save_interval = tokio::time::Duration::from_secs(1);
         let mut last_save = tokio::time::Instant::now();
 
@@ -495,6 +517,7 @@ impl Downloader {
                                         }
                                     }
                                     Ok(Err(_)) => { /* 通道关闭 */
+                                        self.reporter.operation_result(OperationType::Download, task_id, 500, "State channel closed".to_string()).await.ok();
                                      }
                                     Err(_) => { /* 超时继续检查 */
                                     }
@@ -522,10 +545,12 @@ impl Downloader {
                 }
                 DownloaderState::Stopped => {
                     task.cancel().await?;
+                    self.reporter.operation_result(OperationType::Download, task_id, 200, "Download stopped".to_string()).await.ok();
                     self.reporter
                         .finish_task(task_id, DownloadResult::Canceled)
                         .await?;
                     self.save_state().await?;
+                    self.cancel_token.cancel();
                     return Ok(());
                 }
                 DownloaderState::Running => {}
@@ -550,7 +575,9 @@ impl Downloader {
                                             break;
                                         }
                                     }
-                                    Ok(Err(_)) => { /* 通道关闭 */ }
+                                    Ok(Err(_)) => { /* 通道关闭 */ 
+                                        self.reporter.operation_result(OperationType::Download, task_id, 500, "State channel closed".to_string()).await.ok();
+                                    }
                                     Err(_) => { /* 超时继续检查 */ }
                                 }
                             }
@@ -575,6 +602,7 @@ impl Downloader {
                     self.reporter
                         .finish_task(task_id, DownloadResult::Canceled)
                         .await?;
+                    self.reporter.operation_result(OperationType::Download, task_id, 200, "Download canceled".to_string()).await.ok();
                     drop(task_state);
                     self.save_state().await?;
                     return Ok(());
@@ -610,6 +638,7 @@ impl Downloader {
         let final_size = tokio::fs::metadata(&file_path).await?;
         if final_size.len() == total_size {
             task.transition_state(TaskState::Completed).await?;
+            self.reporter.operation_result(OperationType::Download, task_id, 200, "Download task success".to_string()).await.ok();
             self.reporter
                 .finish_task(
                     task_id,
@@ -623,6 +652,7 @@ impl Downloader {
         } else {
             tokio::fs::remove_file(&file_path).await?;
             task.transition_state(TaskState::Failed).await?;
+            self.reporter.operation_result(OperationType::Download, task_id, 500, "Downloaded size mismatch".to_string()).await.ok();
             self.reporter
                 .finish_task(
                     task_id,
