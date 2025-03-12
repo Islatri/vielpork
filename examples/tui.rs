@@ -1,3 +1,5 @@
+#![cfg(feature = "tui")]
+
 use vielpork::base::enums::DownloadResource;
 use vielpork::base::structs::DownloadOptions;
 use vielpork::downloader::Downloader;
