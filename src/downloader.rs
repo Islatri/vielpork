@@ -55,7 +55,6 @@ impl Downloader {
     pub async fn transition_state(&self, new_state: DownloaderState) -> Result<()> {
         let mut current = self.state.write().await;
 
-        // 定义合法状态转换
         let valid = match (*current, new_state) {
             (DownloaderState::Idle, DownloaderState::Idle) => true,
             (DownloaderState::Idle, DownloaderState::Running) => true,
@@ -324,14 +323,19 @@ impl Downloader {
 
         tokio::fs::remove_file(PathBuf::from(&options.save_path).join("downloading.json")).await?;
 
-        self.reporter.operation_result(OperationType::Download, 0, 200, "All Tasks Completed".to_string()).await?;
+        self.reporter
+            .operation_result(
+                OperationType::Download,
+                0,
+                200,
+                "All Tasks Completed".to_string(),
+            )
+            .await?;
 
         Ok(())
     }
 
     async fn download_task(&self, resource: DownloadResource) -> Result<()> {
-
-        
         let global_state = self.state.read().await;
         if *global_state == DownloaderState::Stopped {
             return Ok(());
@@ -541,11 +545,19 @@ impl Downloader {
                         }
                     }
 
-                    task.resume().await?; // 应该就没事了
+                    task.resume().await?;
                 }
                 DownloaderState::Stopped => {
                     task.cancel().await?;
-                    self.reporter.operation_result(OperationType::Download, task_id, 200, "Download stopped".to_string()).await.ok();
+                    self.reporter
+                        .operation_result(
+                            OperationType::Download,
+                            task_id,
+                            200,
+                            "Download stopped".to_string(),
+                        )
+                        .await
+                        .ok();
                     self.reporter
                         .finish_task(task_id, DownloadResult::Canceled)
                         .await?;
@@ -575,7 +587,7 @@ impl Downloader {
                                             break;
                                         }
                                     }
-                                    Ok(Err(_)) => { /* 通道关闭 */ 
+                                    Ok(Err(_)) => { /* 通道关闭 */
                                         self.reporter.operation_result(OperationType::Download, task_id, 500, "State channel closed".to_string()).await.ok();
                                     }
                                     Err(_) => { /* 超时继续检查 */ }
@@ -602,7 +614,15 @@ impl Downloader {
                     self.reporter
                         .finish_task(task_id, DownloadResult::Canceled)
                         .await?;
-                    self.reporter.operation_result(OperationType::Download, task_id, 200, "Download canceled".to_string()).await.ok();
+                    self.reporter
+                        .operation_result(
+                            OperationType::Download,
+                            task_id,
+                            200,
+                            "Download canceled".to_string(),
+                        )
+                        .await
+                        .ok();
                     drop(task_state);
                     self.save_state().await?;
                     return Ok(());
@@ -638,7 +658,15 @@ impl Downloader {
         let final_size = tokio::fs::metadata(&file_path).await?;
         if final_size.len() == total_size {
             task.transition_state(TaskState::Completed).await?;
-            self.reporter.operation_result(OperationType::Download, task_id, 200, "Download task success".to_string()).await.ok();
+            self.reporter
+                .operation_result(
+                    OperationType::Download,
+                    task_id,
+                    200,
+                    "Download task success".to_string(),
+                )
+                .await
+                .ok();
             self.reporter
                 .finish_task(
                     task_id,
@@ -652,7 +680,15 @@ impl Downloader {
         } else {
             tokio::fs::remove_file(&file_path).await?;
             task.transition_state(TaskState::Failed).await?;
-            self.reporter.operation_result(OperationType::Download, task_id, 500, "Downloaded size mismatch".to_string()).await.ok();
+            self.reporter
+                .operation_result(
+                    OperationType::Download,
+                    task_id,
+                    500,
+                    "Downloaded size mismatch".to_string(),
+                )
+                .await
+                .ok();
             self.reporter
                 .finish_task(
                     task_id,

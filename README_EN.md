@@ -164,6 +164,8 @@ You can see all traits at `vielpork::base::traits` and implement your own compon
 
 This library was written in about a morning, so there are definitely many areas that need improvement. At present, it only meets the requirements of my own project and cannot guarantee that it will fully meet everyone's requirements.
 
+And I am a Rust beginner, so there may be many non-standard places in the code. Because of the limited time for learning and programming, I apologize for any inconvenience caused ( >﹏<。).
+
 So, if there are any problems with the code, or if you have any suggestions, please feel free to submit a PR or Issue, and I will handle it as soon as possible~
 
 If you want to contribute code, please follow these rules:

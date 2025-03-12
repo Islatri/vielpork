@@ -146,9 +146,9 @@ impl ResultReporter for TuiReporter {
         message: String,
     ) -> Result<()> {
         if code == 200 {
-            println!("{} at {}: {}", operation,task_id, message);
+            println!("{} at {}: {}", operation, task_id, message);
         } else {
-            eprintln!("{} at {}: {}", operation,task_id, message);
+            eprintln!("{} at {}: {}", operation, task_id, message);
         }
         Ok(())
     }

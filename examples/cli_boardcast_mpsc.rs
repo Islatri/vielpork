@@ -49,7 +49,10 @@ async fn main() -> Result<()> {
                     code,
                     message,
                 } => {
-                    println!("Operation result: {:?} - {} - {} - {}", operation, task_id, code, message);
+                    println!(
+                        "Operation result: {:?} - {} - {} - {}",
+                        operation, task_id, code, message
+                    );
                 }
             }
         }
@@ -66,7 +69,7 @@ async fn main() -> Result<()> {
         DownloadResource::Url("https://example.com".to_string()),
         DownloadResource::Url("https://example.com".to_string()),
     ];
-    // 控制下载启停，断点续联
+
     let downloader_clone = Arc::clone(&downloader);
     tokio::spawn(async move {
         downloader_clone

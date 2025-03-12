@@ -67,8 +67,6 @@ pub enum AuthMethod {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum OperationType {
-
-
     // 全局操作
     StartAll,
     PauseAll,
@@ -90,7 +88,7 @@ pub enum OperationType {
     DownloadTask(u32),
 }
 
-impl OperationType{
+impl OperationType {
     pub fn to_i32(&self) -> i32 {
         match self {
             OperationType::StartAll => 0,
@@ -105,7 +103,6 @@ impl OperationType{
             OperationType::SetRateLimit(_) => 9,
             OperationType::Download => 10,
             OperationType::DownloadTask(_) => 11,
-            
         }
     }
     pub fn is_global(&self) -> bool {
@@ -119,7 +116,6 @@ impl OperationType{
             _ => false,
         }
     }
-
 }
 
 impl std::fmt::Display for OperationType {
