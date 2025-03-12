@@ -8,7 +8,7 @@ description = "A multi-threaded downloader with multi-reporter built in Rust"
 keywords = ["downloader", "multi-threaded", "multi-reporter", "reqwest", "tokio"]
 categories = ["asynchronous", "network-programming"]
 license = "MIT"
-documentation = "https://docs.rs/vielpork"
+documentation = ["https://docs.rs/vielpork","https://hakochest.github.io/vielpork-cn/","https://hakochest.github.io/vielpork-en/"]
 repository = "https://github.com/islatri/vielpork"
 
 [dependencies]
