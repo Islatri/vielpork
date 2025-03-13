@@ -36,7 +36,7 @@ impl Downloader {
         reporter: Box<dyn CombinedReporter>,
     ) -> Self {
         let client = reqwest::ClientBuilder::new()
-            .user_agent("osynicite")
+            .user_agent("vielpork")
             .default_headers(reqwest::header::HeaderMap::new())
             .build()
             .unwrap();
