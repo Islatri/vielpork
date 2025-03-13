@@ -1,11 +1,11 @@
 [package]
 name = "vielpork"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Hako Chest <zoneherobrine@gmail.com>"]
 rust-version = "1.85.0"
-description = "A multi-threaded downloader with multi-reporter built in Rust"
-keywords = ["downloader", "multi-threaded", "multi-reporter", "reqwest", "tokio"]
+description = "A high-performance multi-threaded HTTP downloader with extensible reporting and resolution strategies."
+keywords = ["downloader", "multi-threaded", "customization", "reqwest", "tokio"]
 categories = ["asynchronous", "network-programming"]
 license = "MIT"
 documentation = "https://docs.rs/vielpork"
