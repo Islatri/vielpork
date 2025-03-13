@@ -87,7 +87,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-vielpork = "0.1.0"
+vielpork = "0.1.2"
 ```
 
 ## Quick Start

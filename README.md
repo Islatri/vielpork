@@ -86,7 +86,7 @@ stateDiagram-v2
 
 ```toml
 [dependencies]
-vielpork = "0.1.0"
+vielpork = "0.1.2"
 ```
 
 ## Quick Start

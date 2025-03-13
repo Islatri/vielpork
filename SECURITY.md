@@ -7,7 +7,7 @@ currently being supported with security updates.
 
 | Version | Supported                              |
 | ------- | -------------------------------------- |
-| 0.1.0   | :white_check_mark:CliBoardcastMpsc,Tui |
+| ^0.1.0   | :white_check_mark:CliBoardcastMpsc,Tui |
 
 ## Reporting a Vulnerability
 
